@@ -102,6 +102,9 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
   save: "\u4FDD\u5B58",
   saving: "\u4FDD\u5B58\u4E2D\u2026",
   reset: "\u6062\u590D\u9ED8\u8BA4",
+  expand: "\u5C55\u5F00\u8BBE\u7F6E",
+  collapse: "\u6536\u8D77\u8BBE\u7F6E",
+  unsaved: "\u672A\u4FDD\u5B58",
   enabled: "\u5F00\u542F",
   disabled: "\u5173\u95ED",
   unavailable: "\u8BBE\u7F6E\u670D\u52A1\u4E0D\u53EF\u7528\uFF0C\u5F53\u524D\u4F7F\u7528\u9ED8\u8BA4\u914D\u7F6E\u3002",
@@ -140,6 +143,9 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
   save: "Save",
   saving: "Saving\u2026",
   reset: "Reset defaults",
+  expand: "Show settings",
+  collapse: "Hide settings",
+  unsaved: "Unsaved",
   enabled: "Enabled",
   disabled: "Disabled",
   unavailable: "Settings are unavailable; defaults are active.",
@@ -154,16 +160,20 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
   notificationFailed: "DSH: task failed",
   conversation: "Conversation"
 }, CSS = `
-.dsh-notify-settings{max-width:680px;display:flex;flex-direction:column;gap:12px;color:var(--dsw-alias-label-primary)}
-.dsh-notify-header{display:flex;flex-direction:column;gap:3px}.dsh-notify-header h3{font-size:16px;margin:0}.dsh-notify-header p{font-size:13px;color:var(--dsw-alias-label-secondary);margin:0;line-height:20px}
+.dsh-notify-card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;list-style:none;transition:border-color .16s,background .16s;color:var(--dsw-alias-label-primary)}
+.dsh-notify-card:hover{border-color:var(--dsw-alias-label-dimmed)}.dsh-notify-card[data-open=true]{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}
+.dsh-notify-header{appearance:none;width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer;background:transparent;border:0;border-radius:12px;display:flex;align-items:center;gap:12px;padding:14px 16px}.dsh-notify-header:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
+.dsh-notify-headText{display:flex;flex-direction:column;flex:1;gap:4px;min-width:0}.dsh-notify-name{color:var(--dsw-alias-label-primary);font-size:15px;font-weight:600;line-height:1.4}.dsh-notify-description{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}
+.dsh-notify-pending{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;flex:none;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}.dsh-notify-chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .16s}.dsh-notify-chevron[data-open=true]{transform:rotate(180deg)}
+.dsh-notify-body{border-top:1px solid var(--dsw-alias-border-l2);margin:0 16px;padding-bottom:8px}.dsh-notify-body>.dsh-notify-row:first-child{border-top:0}
 .dsh-notify-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid var(--dsw-alias-border-l2)}
 .dsh-notify-rowText{display:flex;min-width:0;flex-direction:column;gap:2px}.dsh-notify-rowText strong{font-size:14px}.dsh-notify-rowText span{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
 .dsh-notify-switch{position:relative;flex:none;width:42px;height:24px;border:0;border-radius:12px;background:var(--dsw-alias-border-l2);cursor:pointer}.dsh-notify-switch[data-active=true]{background:var(--dsw-alias-state-business-primary)}.dsh-notify-switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform 120ms ease}.dsh-notify-switch[data-active=true] span{transform:translateX(18px)}
 .dsh-notify-permission{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.dsh-notify-badge{border-radius:5px;padding:2px 7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.dsh-notify-badge[data-state=granted]{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent)}.dsh-notify-badge[data-state=denied],.dsh-notify-badge[data-state=unsupported]{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent)}
-.dsh-notify-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dsh-notify-actions button,.dsh-notify-permission button{border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}.dsh-notify-actions button[data-primary=true]{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-primary);color:#fff}.dsh-notify-actions button:disabled,.dsh-notify-permission button:disabled{opacity:.5;cursor:default}
+.dsh-notify-actions{border-top:1px solid var(--dsw-alias-border-l2);display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;flex-wrap:wrap}.dsh-notify-actions button,.dsh-notify-permission button{border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer}.dsh-notify-actions button[data-primary=true]{border-color:transparent;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dsh-notify-actions button:disabled,.dsh-notify-permission button:disabled{opacity:.4;cursor:default}.dsh-notify-actions button:focus-visible,.dsh-notify-permission button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .dsh-notify-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin:0}.dsh-notify-status[data-error=true]{color:var(--dsw-alias-state-error-primary)}
 @media (max-width:720px){.dsh-notify-row{align-items:flex-start;flex-direction:column;gap:8px}.dsh-notify-permission{justify-content:flex-start}}
-@media (prefers-reduced-motion:reduce){.dsh-notify-switch span{transition:none}}
+@media (prefers-reduced-motion:reduce){.dsh-notify-card,.dsh-notify-chevron,.dsh-notify-switch span{transition:none}}
 `;
 function normalizeConfig(value) {
   let config = {};
@@ -347,10 +357,31 @@ function ToggleRow({ title, description, checked, onChange }) {
     h("button", { type: "button", className: "dsh-notify-switch", role: "switch", "aria-checked": checked, "data-active": checked ? "true" : void 0, onClick: () => onChange(!checked) }, h("span", null))
   );
 }
+function Chevron({ open }) {
+  let h = import_react.default.createElement;
+  return h("svg", {
+    className: "dsh-notify-chevron",
+    "data-open": open ? "true" : void 0,
+    width: 14,
+    height: 14,
+    viewBox: "0 0 14 14",
+    fill: "none",
+    "aria-hidden": "true"
+  }, h("path", {
+    d: "M3 5.25 7 9.25 11 5.25",
+    stroke: "currentColor",
+    strokeWidth: 1.4,
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }));
+}
+function configsEqual(left, right) {
+  return Object.keys(DEFAULTS).every((key) => left[key] === right[key]);
+}
 function SettingsCard({ store, controller, t }) {
-  let snapshot = useStore(store), [draft, setDraft] = import_react.default.useState(snapshot.value), [permission, setPermission] = import_react.default.useState(permissionOf()), [state, setState] = import_react.default.useState({ saving: !1, error: "" });
+  let snapshot = useStore(store), [draft, setDraft] = import_react.default.useState(snapshot.value), [permission, setPermission] = import_react.default.useState(permissionOf()), [state, setState] = import_react.default.useState({ saving: !1, error: "" }), [open, setOpen] = import_react.default.useState(!1);
   import_react.default.useEffect(() => setDraft(snapshot.value), [snapshot.value]);
-  let patch = (key, value) => setDraft((current) => ({ ...current, [key]: value })), authorize = async () => {
+  let dirty = !configsEqual(draft, snapshot.value), patch = (key, value) => setDraft((current) => ({ ...current, [key]: value })), authorize = async () => {
     setState((current) => ({ ...current, error: "" }));
     try {
       permissionOf() === "default" && await window.Notification.requestPermission();
@@ -375,35 +406,56 @@ function SettingsCard({ store, controller, t }) {
     }
   }, h = import_react.default.createElement;
   return h(
-    "section",
-    { className: "dsh-notify-settings" },
-    h("div", { className: "dsh-notify-header" }, h("h3", null, t("title")), h("p", null, t("description"))),
-    h(ToggleRow, { title: t("master"), description: t("masterDesc"), checked: draft.enabled, onChange: (value) => patch("enabled", value) }),
-    h(ToggleRow, { title: t("approval"), description: t("approvalDesc"), checked: draft.approvalPendingEnabled, onChange: (value) => patch("approvalPendingEnabled", value) }),
-    h(ToggleRow, { title: t("question"), description: t("questionDesc"), checked: draft.questionPendingEnabled, onChange: (value) => patch("questionPendingEnabled", value) }),
-    h(ToggleRow, { title: t("succeeded"), description: t("succeededDesc"), checked: draft.taskSucceededEnabled, onChange: (value) => patch("taskSucceededEnabled", value) }),
-    h(ToggleRow, { title: t("failed"), description: t("failedDesc"), checked: draft.taskFailedEnabled, onChange: (value) => patch("taskFailedEnabled", value) }),
+    "li",
+    { className: "dsh-notify-card", "data-open": open ? "true" : void 0 },
     h(
+      "button",
+      {
+        type: "button",
+        className: "dsh-notify-header",
+        "aria-expanded": open,
+        "aria-label": `${t(open ? "collapse" : "expand")}\uFF1A${t("title")}`,
+        onClick: () => setOpen((current) => !current)
+      },
+      h(
+        "span",
+        { className: "dsh-notify-headText" },
+        h("span", { className: "dsh-notify-name" }, t("title")),
+        h("span", { className: "dsh-notify-description" }, t("description"))
+      ),
+      dirty ? h("span", { className: "dsh-notify-pending" }, t("unsaved")) : null,
+      h(Chevron, { open })
+    ),
+    open ? h(
       "div",
-      { className: "dsh-notify-row" },
-      h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("permission")), h("span", null, t("permissionDesc"))),
+      { className: "dsh-notify-body" },
+      h(ToggleRow, { title: t("master"), description: t("masterDesc"), checked: draft.enabled, onChange: (value) => patch("enabled", value) }),
+      h(ToggleRow, { title: t("approval"), description: t("approvalDesc"), checked: draft.approvalPendingEnabled, onChange: (value) => patch("approvalPendingEnabled", value) }),
+      h(ToggleRow, { title: t("question"), description: t("questionDesc"), checked: draft.questionPendingEnabled, onChange: (value) => patch("questionPendingEnabled", value) }),
+      h(ToggleRow, { title: t("succeeded"), description: t("succeededDesc"), checked: draft.taskSucceededEnabled, onChange: (value) => patch("taskSucceededEnabled", value) }),
+      h(ToggleRow, { title: t("failed"), description: t("failedDesc"), checked: draft.taskFailedEnabled, onChange: (value) => patch("taskFailedEnabled", value) }),
       h(
         "div",
-        { className: "dsh-notify-permission" },
-        h("span", { className: "dsh-notify-badge", "data-state": permission }, t(`permission${permission[0]?.toUpperCase()}${permission.slice(1)}`)),
-        h("button", { type: "button", disabled: permission === "unsupported" || permission === "granted", onClick: authorize }, t("authorize")),
-        h("button", { type: "button", onClick: () => setPermission(permissionOf()) }, t("recheck")),
-        h("button", { type: "button", disabled: permission !== "granted", onClick: () => controller.test() }, t("test"))
+        { className: "dsh-notify-row" },
+        h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("permission")), h("span", null, t("permissionDesc"))),
+        h(
+          "div",
+          { className: "dsh-notify-permission" },
+          h("span", { className: "dsh-notify-badge", "data-state": permission }, t(`permission${permission[0]?.toUpperCase()}${permission.slice(1)}`)),
+          h("button", { type: "button", disabled: permission === "unsupported" || permission === "granted", onClick: authorize }, t("authorize")),
+          h("button", { type: "button", onClick: () => setPermission(permissionOf()) }, t("recheck")),
+          h("button", { type: "button", disabled: permission !== "granted", onClick: () => controller.test() }, t("test"))
+        )
+      ),
+      snapshot.status === "unavailable" ? h("p", { className: "dsh-notify-status", "data-error": "true" }, t("unavailable")) : null,
+      state.error ? h("p", { className: "dsh-notify-status", "data-error": "true" }, state.error) : null,
+      h(
+        "div",
+        { className: "dsh-notify-actions" },
+        h("button", { type: "button", "data-primary": "true", disabled: state.saving || !snapshot.writable || !dirty, onClick: save }, state.saving ? t("saving") : t("save")),
+        h("button", { type: "button", disabled: state.saving || !snapshot.writable, onClick: reset }, t("reset"))
       )
-    ),
-    snapshot.status === "unavailable" ? h("p", { className: "dsh-notify-status", "data-error": "true" }, t("unavailable")) : null,
-    state.error ? h("p", { className: "dsh-notify-status", "data-error": "true" }, state.error) : null,
-    h(
-      "div",
-      { className: "dsh-notify-actions" },
-      h("button", { type: "button", "data-primary": "true", disabled: state.saving || !snapshot.writable, onClick: save }, state.saving ? t("saving") : t("save")),
-      h("button", { type: "button", disabled: state.saving || !snapshot.writable, onClick: reset }, t("reset"))
-    )
+    ) : null
   );
 }
 var inject = ["slots", "locale", "sessions"];

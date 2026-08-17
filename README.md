@@ -1,5 +1,7 @@
 # dsh-notifications
 
+[English](./README.en.md)
+
 DeepSeek Harness（DSH）Web 消息通知插件。当会话等待审批、发起结构化提问、成功完成或失败时，通过浏览器通知提醒用户，并支持点击通知打开对应会话。
 
 ## 功能特性
@@ -18,6 +20,7 @@ DeepSeek Harness（DSH）Web 消息通知插件。当会话等待审批、发起
 - [兼容性](#兼容性)
 - [安装](#安装)
 - [使用方法](#使用方法)
+- [配置 UI](#配置-ui)
 - [配置说明](#配置说明)
 - [工作原理](#工作原理)
 - [开发与测试](#开发与测试)
@@ -66,6 +69,16 @@ dsh plugin --profile web remove dsh-notifications
 6. 按需开关四类通知并保存。
 
 默认只有在 DSH 标签页处于后台，或事件来自非当前会话时才通知。点击通知会聚焦 DSH 并打开对应会话；若目标会话已经不存在，则只聚焦页面。
+
+## 配置 UI
+
+插件配置列表：
+
+![消息通知插件配置列表](./assets/notification-settings-ui-01.png)
+
+展开后的消息通知配置：
+
+![消息通知插件展开配置](./assets/notification-settings-ui-02.png)
 
 ## 配置说明
 

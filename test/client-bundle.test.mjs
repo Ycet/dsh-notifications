@@ -6,6 +6,9 @@ test("built client registers the official plugin settings item and required runt
   const bundle = readFileSync(new URL("../client.js", import.meta.url), "utf8");
   assert.match(bundle, /id: "dsh-notifications"/);
   assert.match(bundle, /settings\.plugin\.item/);
+  assert.match(bundle, /aria-expanded/);
+  assert.match(bundle, /dsh-notify-card/);
+  assert.match(bundle, /dsh-notify-body/);
   assert.match(bundle, /dsh-notifications\/api\/events/);
   assert.match(bundle, /new (?:window\.)?Notification/);
   assert.match(bundle, /ctx\.sessions\.open/);
