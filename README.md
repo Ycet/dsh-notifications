@@ -31,7 +31,7 @@ DeepSeek Harness（DSH）Web 消息通知插件。当会话等待审批、发起
 
 ## 兼容性
 
-- DeepSeek Harness `0.1.0-rc.6` 系列。
+- DeepSeek Harness `0.1.0-rc.6`、`0.1.0-rc.7` 系列。
 - Windows、macOS、Linux。
 - 桌面版 Chrome、Edge、Brave、Chromium 等 Chromium 内核浏览器。
 - DSH 页面必须保持打开；浏览器关闭后不能通知。
@@ -68,11 +68,11 @@ dsh plugin --profile web remove dsh-notifications
 
 插件配置列表：
 
-![消息通知插件配置列表](./assets/notification-settings-ui-01.png)
+![消息通知插件配置列表](./docs/images/notification-settings-ui-01.png)
 
 展开后的消息通知配置：
 
-![消息通知插件展开配置](./assets/notification-settings-ui-02.png)
+![消息通知插件展开配置](./docs/images/notification-settings-ui-02.png)
 
 ## 配置说明
 

@@ -444,6 +444,7 @@ export function apply(ctx) {
   ctx.effect(() => controller.start(), "dsh-notifications: event stream");
   ctx.slots.inject("settings.plugin.item", () => ctx.slots.register({
     name: "settings.plugin.item",
+    key: "dsh-notifications",
     id: "notifications",
     order: 70,
     inject: () => ({ store, controller, t })

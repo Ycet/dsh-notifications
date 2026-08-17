@@ -468,6 +468,7 @@ function apply(ctx) {
     return tag.dataset.plugin = "dsh-notifications", tag.textContent = CSS, document.head.appendChild(tag), () => tag.remove();
   }, "dsh-notifications: styles"), ctx.effect(() => controller.start(), "dsh-notifications: event stream"), ctx.slots.inject("settings.plugin.item", () => ctx.slots.register({
     name: "settings.plugin.item",
+    key: "dsh-notifications",
     id: "notifications",
     order: 70,
     inject: () => ({ store, controller, t })

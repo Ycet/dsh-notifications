@@ -31,7 +31,7 @@ DeepSeek Harness (DSH) web notification plugin. It reminds users through browser
 
 ## Compatibility
 
-- DeepSeek Harness `0.1.0-rc.6` series.
+- DeepSeek Harness `0.1.0-rc.6` and `0.1.0-rc.7` series.
 - Windows, macOS, and Linux.
 - Desktop Chrome, Edge, Brave, Chromium, and other Chromium-based browsers.
 - The DSH page must remain open; notifications cannot be delivered after the browser closes.
@@ -68,11 +68,11 @@ By default, notifications are sent only when the DSH tab is in the background or
 
 Collapsed plugin configuration list:
 
-![Collapsed notifications plugin configuration](./assets/notification-settings-ui-01.png)
+![Collapsed notifications plugin configuration](./docs/images/notification-settings-ui-01.png)
 
 Expanded notifications configuration:
 
-![Expanded notifications plugin configuration](./assets/notification-settings-ui-02.png)
+![Expanded notifications plugin configuration](./docs/images/notification-settings-ui-02.png)
 
 ## Configuration
 
