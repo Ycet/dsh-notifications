@@ -45,12 +45,6 @@ Prerequisite: DSH is installed, and the pnpm major version matches the store ver
 dsh plugin --profile web add dsh-notifications@file:/absolute/path/to/dsh-notifications
 ```
 
-Local installation example for this repository:
-
-```bash
-dsh plugin --profile web add dsh-notifications@file:/Users/Project/AI_project/00_Long_term_project/00_大型任务/01_dsh插件制作/dsh-notifications
-```
-
 `file:` installation uses a snapshot. Re-run the installation command after updating the source, then restart `dsh web`; do not use `link:` installation.
 
 Uninstall:

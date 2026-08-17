@@ -45,12 +45,6 @@ DeepSeek Harness（DSH）Web 消息通知插件。当会话等待审批、发起
 dsh plugin --profile web add dsh-notifications@file:/absolute/path/to/dsh-notifications
 ```
 
-本仓库中的本地安装示例：
-
-```bash
-dsh plugin --profile web add dsh-notifications@file:/Users/Project/AI_project/00_Long_term_project/00_大型任务/01_dsh插件制作/dsh-notifications
-```
-
 `file:` 安装是快照。更新源码后需要重新执行安装命令，再重启 `dsh web`；不要使用 `link:` 安装。
 
 卸载：
