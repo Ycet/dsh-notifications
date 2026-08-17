@@ -1,0 +1,56 @@
+[
+  {
+    "type": "approval/asked",
+    "seq": 101,
+    "time": 1786953600000,
+    "data": {
+      "id": "approval-redacted",
+      "callId": "call-redacted",
+      "toolName": "bash"
+    }
+  },
+  {
+    "type": "tool/call",
+    "seq": 102,
+    "time": 1786953601000,
+    "data": {
+      "name": "ask_user_question",
+      "callId": "question-redacted",
+      "arguments": "[redacted]"
+    }
+  },
+  {
+    "type": "turn/end",
+    "seq": 103,
+    "time": 1786953602000,
+    "data": {
+      "reason": {
+        "kind": "completed"
+      }
+    }
+  },
+  {
+    "type": "turn/end",
+    "seq": 104,
+    "time": 1786953603000,
+    "data": {
+      "reason": {
+        "kind": "error",
+        "error": "[redacted]"
+      }
+    }
+  },
+  {
+    "type": "turn/end",
+    "seq": 105,
+    "time": 1786953604000,
+    "data": {
+      "reason": {
+        "kind": "aborted",
+        "reason": {
+          "kind": "user"
+        }
+      }
+    }
+  }
+]

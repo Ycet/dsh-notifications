@@ -1,0 +1,4 @@
+# dsh-notifications bundle patch
+- insert:
+    - id: notifications
+      name: dsh-notifications
