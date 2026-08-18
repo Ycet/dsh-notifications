@@ -11,7 +11,8 @@ export const DEFAULTS = Object.freeze({
   approvalPendingEnabled: true,
   questionPendingEnabled: true,
   taskSucceededEnabled: true,
-  taskFailedEnabled: true
+  taskFailedEnabled: true,
+  subagentTaskEndedEnabled: true
 });
 
 export const SettingsSchema = z.object({
@@ -19,7 +20,8 @@ export const SettingsSchema = z.object({
   approvalPendingEnabled: z.boolean().default(DEFAULTS.approvalPendingEnabled),
   questionPendingEnabled: z.boolean().default(DEFAULTS.questionPendingEnabled),
   taskSucceededEnabled: z.boolean().default(DEFAULTS.taskSucceededEnabled),
-  taskFailedEnabled: z.boolean().default(DEFAULTS.taskFailedEnabled)
+  taskFailedEnabled: z.boolean().default(DEFAULTS.taskFailedEnabled),
+  subagentTaskEndedEnabled: z.boolean().default(DEFAULTS.subagentTaskEndedEnabled)
 });
 
 export const CONFIG_PATH = "/dsh-notifications/api/config";
@@ -110,9 +112,17 @@ function normalizePatch(value) {
   return patch;
 }
 
-function enabledFor(config, type) {
+export function isSubagentSession(session) {
+  const header = isPlainObject(session?.header) ? session.header : {};
+  return header.origin === "subagent"
+    || (Number.isSafeInteger(header.delegationDepth) && header.delegationDepth > 0);
+}
+
+export function notificationEnabled(config, type, session) {
   const flag = FLAG_BY_TYPE[type];
-  return config.enabled === true && flag !== undefined && config[flag] === true;
+  if (config.enabled !== true || flag === undefined || config[flag] !== true) return false;
+  const taskEnded = type === "task_succeeded" || type === "task_failed";
+  return !taskEnded || !isSubagentSession(session) || config.subagentTaskEndedEnabled === true;
 }
 
 export function apply(ctx) {
@@ -129,7 +139,7 @@ export function apply(ctx) {
     if (typeof sessionId !== "string") return;
     try {
       const notification = classifier.classify(sessionId, event);
-      if (notification !== undefined && enabledFor(configOf(scope), notification.type)) hub.publish(notification);
+      if (notification !== undefined && notificationEnabled(configOf(scope), notification.type, session)) hub.publish(notification);
       if (notification === undefined && typeof event?.type === "string") {
         const previous = diagnostics.get(event.type) || 0;
         if (Date.now() - previous > 5 * 60 * 1000) {

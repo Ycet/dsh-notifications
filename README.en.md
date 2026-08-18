@@ -8,6 +8,7 @@ DeepSeek Harness (DSH) web notification plugin. It reminds users through browser
 
 - Watches all DSH sessions, not only the currently open session.
 - Supports approval-pending, question-pending, task-succeeded, and task-failed notifications.
+- Allows subagent task-success and task-failure notifications to be enabled or disabled independently.
 - Suppresses duplicate notifications while the current session is in the foreground.
 - Elects one leader tab to send notifications when multiple DSH tabs are open.
 - Focuses DSH and opens the corresponding session when a notification is clicked.
@@ -60,7 +61,7 @@ dsh plugin --profile web remove dsh-notifications
 3. Expand the “Notifications” module.
 4. Click “Authorize notifications” and allow the browser permission request.
 5. Click “Send test notification” to verify the browser settings.
-6. Enable or disable the four notification types as needed, then save.
+6. Configure notification categories and subagent task-end notifications as needed, then save.
 
 By default, notifications are sent only when the DSH tab is in the background or when an event belongs to a session other than the current one. Clicking a notification focuses DSH and opens the target session; if that session no longer exists, the page is only focused.
 
@@ -85,6 +86,7 @@ Configuration is stored in the DSH settings service under the `dsh-notifications
 | `questionPendingEnabled` | `true` | Structured-question notifications |
 | `taskSucceededEnabled` | `true` | Task-success notifications |
 | `taskFailedEnabled` | `true` | Task-failure notifications |
+| `subagentTaskEndedEnabled` | `true` | Subagent task-success or task-failure notifications; disabling it does not affect root tasks |
 
 Browser permission is not stored in DSH configuration; the browser stores it independently for the DSH origin.
 
@@ -130,7 +132,7 @@ pnpm test
 pnpm check
 ```
 
-The event classifier uses explicit structural contracts: approvals and questions must be corresponding pending/request events. Structured questions also support explicit tool names such as `request_user_input` inside `tool/call`; ordinary assistant text is not classified by looking for question marks. `turn/end` is treated as success by default, explicit failure results map to failure, and cancellation or abortion does not trigger a notification.
+The event classifier uses explicit structural contracts: approvals and questions must be corresponding pending/request events. Structured questions also support explicit tool names such as `request_user_input` inside `tool/call`; ordinary assistant text is not classified by looking for question marks. `turn/end` is treated as success by default, explicit failure results map to failure, and cancellation or abortion does not trigger a notification. Subagents are identified through official DSH session metadata (`origin: "subagent"` or a positive `delegationDepth`), never inferred from titles or DOM text.
 
 ## Known limitations
 

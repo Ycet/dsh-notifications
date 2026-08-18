@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
-import { apply, CONFIG_PATH, normalizeConfig, trustedRequest } from "../index.js";
+import { apply, CONFIG_PATH, isSubagentSession, normalizeConfig, notificationEnabled, trustedRequest } from "../index.js";
 
 test("normalizes incomplete configuration to defaults", () => {
   assert.deepEqual(normalizeConfig({ enabled: false }), {
@@ -9,8 +9,27 @@ test("normalizes incomplete configuration to defaults", () => {
     approvalPendingEnabled: true,
     questionPendingEnabled: true,
     taskSucceededEnabled: true,
-    taskFailedEnabled: true
+    taskFailedEnabled: true,
+    subagentTaskEndedEnabled: true
   });
+});
+
+test("identifies subagent sessions without treating ordinary forks as subagents", () => {
+  assert.equal(isSubagentSession({ header: { origin: "subagent" } }), true);
+  assert.equal(isSubagentSession({ header: { delegationDepth: 2 } }), true);
+  assert.equal(isSubagentSession({ header: { parentSession: "parent-session" } }), false);
+  assert.equal(isSubagentSession({ header: {} }), false);
+});
+
+test("subagent task-end switch does not suppress root tasks or interactive events", () => {
+  const disabled = { ...normalizeConfig({}), subagentTaskEndedEnabled: false };
+  const child = { header: { origin: "subagent", delegationDepth: 1 } };
+  const root = { header: {} };
+  assert.equal(notificationEnabled(disabled, "task_succeeded", child), false);
+  assert.equal(notificationEnabled(disabled, "task_failed", child), false);
+  assert.equal(notificationEnabled(disabled, "task_succeeded", root), true);
+  assert.equal(notificationEnabled(disabled, "approval_pending", child), true);
+  assert.equal(notificationEnabled(normalizeConfig({}), "task_succeeded", child), true);
 });
 
 test("trust fence accepts loopback same-origin and rejects cross-site requests", () => {
@@ -88,13 +107,19 @@ test("host config route reads, validates, updates, and resets settings", async (
   assert.equal(write.status, 200);
   assert.equal(JSON.parse(write.body).value.taskFailedEnabled, false);
 
+  const subagentWrite = new MockResponse();
+  await handler(new MockRequest("POST", { patch: { subagentTaskEndedEnabled: false }, expectedRevision: 2 }), subagentWrite);
+  assert.equal(subagentWrite.status, 200);
+  assert.equal(JSON.parse(subagentWrite.body).value.subagentTaskEndedEnabled, false);
+
   const invalid = new MockResponse();
   await handler(new MockRequest("POST", { patch: { taskFailedEnabled: "no" } }), invalid);
   assert.equal(invalid.status, 400);
 
   const reset = new MockResponse();
-  await handler(new MockRequest("POST", { reset: true, expectedRevision: 2 }), reset);
+  await handler(new MockRequest("POST", { reset: true, expectedRevision: 3 }), reset);
   assert.equal(reset.status, 200);
   assert.equal(JSON.parse(reset.body).value.taskFailedEnabled, true);
+  assert.equal(JSON.parse(reset.body).value.subagentTaskEndedEnabled, true);
   runtime.dispose();
 });

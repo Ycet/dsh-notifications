@@ -9,7 +9,8 @@ const DEFAULTS = Object.freeze({
   approvalPendingEnabled: true,
   questionPendingEnabled: true,
   taskSucceededEnabled: true,
-  taskFailedEnabled: true
+  taskFailedEnabled: true,
+  subagentTaskEndedEnabled: true
 });
 
 const FLAG_BY_TYPE = Object.freeze({
@@ -32,6 +33,8 @@ const zh = {
   succeededDesc: "任务正常完成时通知。",
   failed: "任务失败",
   failedDesc: "任务异常结束时通知。",
+  subagentEnded: "子代理任务结束",
+  subagentEndedDesc: "子代理任务成功或失败时通知。",
   permission: "浏览器权限",
   permissionDesc: "通知权限由当前浏览器按 DSH 地址管理。",
   permissionUnsupported: "不支持",
@@ -75,6 +78,8 @@ const en = {
   succeededDesc: "Notify when a task completes successfully.",
   failed: "Task failed",
   failedDesc: "Notify when a task ends with an error.",
+  subagentEnded: "Subagent task ended",
+  subagentEndedDesc: "Notify when a subagent task succeeds or fails.",
   permission: "Browser permission",
   permissionDesc: "Permission is managed by this browser for the current DSH origin.",
   permissionUnsupported: "Unsupported",
@@ -408,6 +413,7 @@ function SettingsCard({ store, controller, t }) {
       h(ToggleRow, { title: t("question"), description: t("questionDesc"), checked: draft.questionPendingEnabled, onChange: (value) => patch("questionPendingEnabled", value) }),
       h(ToggleRow, { title: t("succeeded"), description: t("succeededDesc"), checked: draft.taskSucceededEnabled, onChange: (value) => patch("taskSucceededEnabled", value) }),
       h(ToggleRow, { title: t("failed"), description: t("failedDesc"), checked: draft.taskFailedEnabled, onChange: (value) => patch("taskFailedEnabled", value) }),
+      h(ToggleRow, { title: t("subagentEnded"), description: t("subagentEndedDesc"), checked: draft.subagentTaskEndedEnabled, onChange: (value) => patch("subagentTaskEndedEnabled", value) }),
       h("div", { className: "dsh-notify-row" },
         h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("permission")), h("span", null, t("permissionDesc"))),
         h("div", { className: "dsh-notify-permission" },

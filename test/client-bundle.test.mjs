@@ -12,5 +12,6 @@ test("built client registers the official plugin settings item and required runt
   assert.match(bundle, /dsh-notifications\/api\/events/);
   assert.match(bundle, /new (?:window\.)?Notification/);
   assert.match(bundle, /ctx\.sessions\.open/);
+  assert.match(bundle, /subagentTaskEndedEnabled/);
   assert.doesNotMatch(bundle, /MutationObserver/);
 });

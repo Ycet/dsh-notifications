@@ -8,7 +8,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 test("package exposes a host and web client bundle", async () => {
   const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  assert.equal(pkg.version, "0.1.2");
+  assert.equal(pkg.version, "0.1.3");
   assert.equal(pkg.main, "index.js");
   assert.equal(pkg.exports["./client"], "./client.js");
   assert.equal(pkg.dsh.bundle.patch, "./cordis.patch.yml");
@@ -28,4 +28,5 @@ test("client registers the official plugin settings item and notification stream
   assert.match(source, /new EventSource\(EVENTS_PATH\)/);
   assert.match(source, /ctx\.sessions\.open/);
   assert.match(source, /Notification\.requestPermission/);
+  assert.match(source, /subagentTaskEndedEnabled/);
 });

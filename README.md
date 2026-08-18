@@ -8,6 +8,7 @@ DeepSeek Harness（DSH）Web 消息通知插件。当会话等待审批、发起
 
 - 监听全部 DSH 会话，不限于当前打开的会话。
 - 支持待审批、等待回答、任务成功、任务失败四类通知。
+- 可单独开启或关闭子代理任务成功与失败通知。
 - 当前会话正在前台查看时自动抑制重复提醒。
 - 多个 DSH 标签页只由一个标签页发送通知。
 - 点击通知聚焦 DSH 并打开对应会话。
@@ -60,7 +61,7 @@ dsh plugin --profile web remove dsh-notifications
 3. 展开「消息通知」模块。
 4. 点击「授权通知」，在浏览器权限提示中选择允许。
 5. 点击「发送测试通知」验证浏览器设置。
-6. 按需开关四类通知并保存。
+6. 按需开关各类通知及子代理任务结束通知并保存。
 
 默认只有在 DSH 标签页处于后台，或事件来自非当前会话时才通知。点击通知会聚焦 DSH 并打开对应会话；若目标会话已经不存在，则只聚焦页面。
 
@@ -85,6 +86,7 @@ dsh plugin --profile web remove dsh-notifications
 | `questionPendingEnabled` | `true` | 结构化提问通知 |
 | `taskSucceededEnabled` | `true` | 任务成功通知 |
 | `taskFailedEnabled` | `true` | 任务失败通知 |
+| `subagentTaskEndedEnabled` | `true` | 子代理任务成功或失败通知；关闭后不影响顶层任务通知 |
 
 浏览器权限不写入 DSH 配置，由浏览器按 DSH origin 独立保存。
 
@@ -130,7 +132,7 @@ pnpm test
 pnpm check
 ```
 
-事件分类器采用显式结构契约：审批或提问必须是对应的 pending/request 事件，结构化提问也支持 `tool/call` 中的 `request_user_input` 等明确工具名；普通 assistant 文本不会按问号识别。`turn/end` 默认为成功，明确的失败结果映射为失败，取消和中止不通知。
+事件分类器采用显式结构契约：审批或提问必须是对应的 pending/request 事件，结构化提问也支持 `tool/call` 中的 `request_user_input` 等明确工具名；普通 assistant 文本不会按问号识别。`turn/end` 默认为成功，明确的失败结果映射为失败，取消和中止不通知。子代理通过 DSH 官方会话元数据 `origin: "subagent"` 或正数 `delegationDepth` 识别，不通过标题或 DOM 文本推断。
 
 ## 已知限制
 

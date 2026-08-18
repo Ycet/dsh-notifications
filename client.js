@@ -71,7 +71,8 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
   approvalPendingEnabled: !0,
   questionPendingEnabled: !0,
   taskSucceededEnabled: !0,
-  taskFailedEnabled: !0
+  taskFailedEnabled: !0,
+  subagentTaskEndedEnabled: !0
 }), FLAG_BY_TYPE = Object.freeze({
   approval_pending: "approvalPendingEnabled",
   question_pending: "questionPendingEnabled",
@@ -90,6 +91,8 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
   succeededDesc: "\u4EFB\u52A1\u6B63\u5E38\u5B8C\u6210\u65F6\u901A\u77E5\u3002",
   failed: "\u4EFB\u52A1\u5931\u8D25",
   failedDesc: "\u4EFB\u52A1\u5F02\u5E38\u7ED3\u675F\u65F6\u901A\u77E5\u3002",
+  subagentEnded: "\u5B50\u4EE3\u7406\u4EFB\u52A1\u7ED3\u675F",
+  subagentEndedDesc: "\u5B50\u4EE3\u7406\u4EFB\u52A1\u6210\u529F\u6216\u5931\u8D25\u65F6\u901A\u77E5\u3002",
   permission: "\u6D4F\u89C8\u5668\u6743\u9650",
   permissionDesc: "\u901A\u77E5\u6743\u9650\u7531\u5F53\u524D\u6D4F\u89C8\u5668\u6309 DSH \u5730\u5740\u7BA1\u7406\u3002",
   permissionUnsupported: "\u4E0D\u652F\u6301",
@@ -131,6 +134,8 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
   succeededDesc: "Notify when a task completes successfully.",
   failed: "Task failed",
   failedDesc: "Notify when a task ends with an error.",
+  subagentEnded: "Subagent task ended",
+  subagentEndedDesc: "Notify when a subagent task succeeds or fails.",
   permission: "Browser permission",
   permissionDesc: "Permission is managed by this browser for the current DSH origin.",
   permissionUnsupported: "Unsupported",
@@ -434,6 +439,7 @@ function SettingsCard({ store, controller, t }) {
       h(ToggleRow, { title: t("question"), description: t("questionDesc"), checked: draft.questionPendingEnabled, onChange: (value) => patch("questionPendingEnabled", value) }),
       h(ToggleRow, { title: t("succeeded"), description: t("succeededDesc"), checked: draft.taskSucceededEnabled, onChange: (value) => patch("taskSucceededEnabled", value) }),
       h(ToggleRow, { title: t("failed"), description: t("failedDesc"), checked: draft.taskFailedEnabled, onChange: (value) => patch("taskFailedEnabled", value) }),
+      h(ToggleRow, { title: t("subagentEnded"), description: t("subagentEndedDesc"), checked: draft.subagentTaskEndedEnabled, onChange: (value) => patch("subagentTaskEndedEnabled", value) }),
       h(
         "div",
         { className: "dsh-notify-row" },
