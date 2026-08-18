@@ -13,5 +13,9 @@ test("built client registers the official plugin settings item and required runt
   assert.match(bundle, /new (?:window\.)?Notification/);
   assert.match(bundle, /ctx\.sessions\.open/);
   assert.match(bundle, /subagentTaskEndedEnabled/);
+  assert.match(bundle, /aria-disabled/);
+  assert.match(bundle, /aria-label/);
+  assert.match(bundle, /data-disabled/);
+  assert.match(bundle, /disabled: !draft\.enabled/);
   assert.doesNotMatch(bundle, /MutationObserver/);
 });

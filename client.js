@@ -171,9 +171,9 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
 .dsh-notify-headText{display:flex;flex-direction:column;flex:1;gap:4px;min-width:0}.dsh-notify-name{color:var(--dsw-alias-label-primary);font-size:15px;font-weight:600;line-height:1.4}.dsh-notify-description{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}
 .dsh-notify-pending{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;flex:none;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}.dsh-notify-chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .16s}.dsh-notify-chevron[data-open=true]{transform:rotate(180deg)}
 .dsh-notify-body{border-top:1px solid var(--dsw-alias-border-l2);margin:0 16px;padding-bottom:8px}.dsh-notify-body>.dsh-notify-row:first-child{border-top:0}
-.dsh-notify-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid var(--dsw-alias-border-l2)}
+.dsh-notify-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid var(--dsw-alias-border-l2)}.dsh-notify-row[data-disabled=true]{opacity:.48}
 .dsh-notify-rowText{display:flex;min-width:0;flex-direction:column;gap:2px}.dsh-notify-rowText strong{font-size:14px}.dsh-notify-rowText span{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
-.dsh-notify-switch{position:relative;flex:none;width:42px;height:24px;border:0;border-radius:12px;background:var(--dsw-alias-border-l2);cursor:pointer}.dsh-notify-switch[data-active=true]{background:var(--dsw-alias-state-business-primary)}.dsh-notify-switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform 120ms ease}.dsh-notify-switch[data-active=true] span{transform:translateX(18px)}
+.dsh-notify-switch{position:relative;flex:none;width:42px;height:24px;border:0;border-radius:12px;background:var(--dsw-alias-border-l2);cursor:pointer}.dsh-notify-switch[data-active=true]{background:var(--dsw-alias-state-business-primary)}.dsh-notify-switch:disabled{background:var(--dsw-alias-border-l2);cursor:not-allowed}.dsh-notify-switch:disabled[data-active=true]{background:var(--dsw-alias-label-tertiary)}.dsh-notify-switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform 120ms ease}.dsh-notify-switch[data-active=true] span{transform:translateX(18px)}
 .dsh-notify-permission{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.dsh-notify-badge{border-radius:5px;padding:2px 7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.dsh-notify-badge[data-state=granted]{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent)}.dsh-notify-badge[data-state=denied],.dsh-notify-badge[data-state=unsupported]{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent)}
 .dsh-notify-actions{border-top:1px solid var(--dsw-alias-border-l2);display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;flex-wrap:wrap}.dsh-notify-actions button,.dsh-notify-permission button{border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer}.dsh-notify-actions button[data-primary=true]{border-color:transparent;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dsh-notify-actions button:disabled,.dsh-notify-permission button:disabled{opacity:.4;cursor:default}.dsh-notify-actions button:focus-visible,.dsh-notify-permission button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .dsh-notify-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin:0}.dsh-notify-status[data-error=true]{color:var(--dsw-alias-state-error-primary)}
@@ -353,13 +353,13 @@ function useStore(store) {
   let [snapshot, setSnapshot] = import_react.default.useState(store.getSnapshot());
   return import_react.default.useEffect(() => store.subscribe(() => setSnapshot(store.getSnapshot())), [store]), snapshot;
 }
-function ToggleRow({ title, description, checked, onChange }) {
+function ToggleRow({ title, description, checked, disabled = !1, onChange }) {
   let h = import_react.default.createElement;
   return h(
     "div",
-    { className: "dsh-notify-row" },
+    { className: "dsh-notify-row", "data-disabled": disabled ? "true" : void 0 },
     h("div", { className: "dsh-notify-rowText" }, h("strong", null, title), h("span", null, description)),
-    h("button", { type: "button", className: "dsh-notify-switch", role: "switch", "aria-checked": checked, "data-active": checked ? "true" : void 0, onClick: () => onChange(!checked) }, h("span", null))
+    h("button", { type: "button", className: "dsh-notify-switch", role: "switch", "aria-label": title, disabled, "aria-checked": checked, "aria-disabled": disabled, "data-active": checked ? "true" : void 0, onClick: () => onChange(!checked) }, h("span", null))
   );
 }
 function Chevron({ open }) {
@@ -435,11 +435,11 @@ function SettingsCard({ store, controller, t }) {
       "div",
       { className: "dsh-notify-body" },
       h(ToggleRow, { title: t("master"), description: t("masterDesc"), checked: draft.enabled, onChange: (value) => patch("enabled", value) }),
-      h(ToggleRow, { title: t("approval"), description: t("approvalDesc"), checked: draft.approvalPendingEnabled, onChange: (value) => patch("approvalPendingEnabled", value) }),
-      h(ToggleRow, { title: t("question"), description: t("questionDesc"), checked: draft.questionPendingEnabled, onChange: (value) => patch("questionPendingEnabled", value) }),
-      h(ToggleRow, { title: t("succeeded"), description: t("succeededDesc"), checked: draft.taskSucceededEnabled, onChange: (value) => patch("taskSucceededEnabled", value) }),
-      h(ToggleRow, { title: t("failed"), description: t("failedDesc"), checked: draft.taskFailedEnabled, onChange: (value) => patch("taskFailedEnabled", value) }),
-      h(ToggleRow, { title: t("subagentEnded"), description: t("subagentEndedDesc"), checked: draft.subagentTaskEndedEnabled, onChange: (value) => patch("subagentTaskEndedEnabled", value) }),
+      h(ToggleRow, { title: t("approval"), description: t("approvalDesc"), checked: draft.approvalPendingEnabled, disabled: !draft.enabled, onChange: (value) => patch("approvalPendingEnabled", value) }),
+      h(ToggleRow, { title: t("question"), description: t("questionDesc"), checked: draft.questionPendingEnabled, disabled: !draft.enabled, onChange: (value) => patch("questionPendingEnabled", value) }),
+      h(ToggleRow, { title: t("succeeded"), description: t("succeededDesc"), checked: draft.taskSucceededEnabled, disabled: !draft.enabled, onChange: (value) => patch("taskSucceededEnabled", value) }),
+      h(ToggleRow, { title: t("failed"), description: t("failedDesc"), checked: draft.taskFailedEnabled, disabled: !draft.enabled, onChange: (value) => patch("taskFailedEnabled", value) }),
+      h(ToggleRow, { title: t("subagentEnded"), description: t("subagentEndedDesc"), checked: draft.subagentTaskEndedEnabled, disabled: !draft.enabled, onChange: (value) => patch("subagentTaskEndedEnabled", value) }),
       h(
         "div",
         { className: "dsh-notify-row" },
