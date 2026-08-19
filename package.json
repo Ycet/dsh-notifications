@@ -1,6 +1,6 @@
 {
   "name": "dsh-notifications",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "DeepSeek Harness web notifications for approvals, structured questions, and task outcomes.",
   "type": "module",
   "main": "index.js",
@@ -15,8 +15,7 @@
     "client.js",
     "cordis.patch.yml",
     "README.md",
-    "README.en.md",
-    "assets",
+    "README_en.md",
     "docs",
     "LICENSE",
     "package.json"
