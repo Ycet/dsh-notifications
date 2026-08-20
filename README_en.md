@@ -70,10 +70,10 @@ The expanded "Notifications" configuration panel (notification toggles, browser 
 
 ```sh
 # Option 1: install from GitHub
-dsh plugin --profile <profile> add github:Ycet/dsh-notifications
+dsh plugin --profile web add github:Ycet/dsh-notifications
 
 # Option 2: install from a local source directory (development)
-dsh plugin --profile <profile> add dsh-notifications@file:<absolute-path-to-plugin>
+dsh plugin --profile web add dsh-notifications@file:<absolute-path-to-plugin>
 ```
 
 The package declares a `dsh.bundle` patch layer; `dsh plugin` merges the loader entry into the profile's bundle layer automatically — no manual editing of `cordis.patch.yml` required.
@@ -84,7 +84,7 @@ The package declares a `dsh.bundle` patch layer; `dsh plugin` merges the loader 
 Uninstall:
 
 ```sh
-dsh plugin --profile <profile> remove dsh-notifications
+dsh plugin --profile web remove dsh-notifications
 ```
 
 ### Launch
