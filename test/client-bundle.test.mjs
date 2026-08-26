@@ -19,3 +19,17 @@ test("built client registers the official plugin settings item and required runt
   assert.match(bundle, /disabled: !draft\.enabled/);
   assert.doesNotMatch(bundle, /MutationObserver/);
 });
+
+test("built client carries the favicon status indicator feature", () => {
+  const bundle = readFileSync(new URL("../client.js", import.meta.url), "utf8");
+  assert.match(bundle, /faviconEnabled/);
+  assert.match(bundle, /dsh-notifications\/api\/viewed/);
+  assert.match(bundle, /dsh-notify-legend/);
+  assert.match(bundle, /addEventListener\([^)]*"state"/);
+  assert.match(bundle, /F5C518/);
+  assert.match(bundle, /E5484D/);
+  assert.match(bundle, /30A46C/);
+  assert.match(bundle, /link\[rel=.icon.\]/);
+  assert.match(bundle, /__DSH_FILL__/);
+  assert.match(bundle, /encodeURIComponent/);
+});

@@ -5,10 +5,10 @@
 
 <div align="center">
 
-DeepSeek Harness（DSH）Web 消息通知插件：会话待审批、发起结构化提问、成功完成或失败时，通过浏览器通知提醒用户，点击通知即可打开对应会话。
+DeepSeek Harness（DSH）Web 消息通知插件：会话待审批、发起结构化提问、成功完成或失败时，通过浏览器通知提醒用户，点击通知即可打开对应会话；同时支持在标签页标题的鲸鱼图标上以颜色直观展示各会话状态。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.5-blue.svg?style=for-the-badge)](package.json)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg?style=for-the-badge)](package.json)
 [![DSH](https://img.shields.io/badge/DSH-0.1.0--rc.6%2B-purple.svg?style=for-the-badge)](https://github.com/deepseek-ai/deepseek-harness)
 
 </div>
@@ -49,6 +49,8 @@ DeepSeek Harness（DSH）Web 消息通知插件：会话待审批、发起结构
 | **全会话监听** | 监听全部 DSH 会话，不限于当前打开的会话 |
 | **四类通知** | 待审批、等待回答、任务成功、任务失败 |
 | **子代理通知独立开关** | 可单独开启或关闭子代理任务成功与失败通知 |
+| **标签页图标变色** | 会话待处理、失败或完成时，标签页鲸鱼图标变黄/红/绿（优先级黄＞红＞绿），点开对应会话后恢复默认色 |
+| **图标状态独立开关** | 鲸鱼图标变色与消息通知总开关相互独立，无需浏览器通知权限 |
 | **前台抑制** | 当前会话正在前台查看时自动抑制重复提醒 |
 | **多标签页单发** | 多个 DSH 标签页同时打开时，只由一个标签页发送通知 |
 | **点击直达** | 点击通知聚焦 DSH 并打开对应会话（会话已不存在时仅聚焦页面） |
@@ -109,6 +111,24 @@ dsh plugin --profile web remove dsh-notifications
 > [!WARNING]
 > 浏览器必须授予当前 DSH 地址通知权限。回环地址可使用 Web Notification API；非安全远程 HTTP 地址可能被浏览器拒绝。
 
+### 标签页鲸鱼图标状态
+
+当任意非子代理会话处于以下状态时，标签页标题中的鲸鱼图标会改变颜色，直观展示 DSH 全局状态：
+
+| 图标颜色 | 出现条件 | 恢复默认色的方式 |
+| --- | --- | --- |
+| 🟡 黄色 | 有会话等待审批 / 回答结构化提问 / plan-review 待审批 | 点开该会话，或待审批状态消失（已回答） |
+| 🔴 红色 | 有会话任务失败（非取消）且未点开 | 点开该会话，或该会话开始新一轮 |
+| 🟢 绿色 | 有会话任务完成且未点开 | 点开该会话，或该会话开始新一轮 |
+
+- 多个状态并存时按 **黄＞红＞绿** 展示（例如同时存在完成、失败、待审批会话时显示黄色）。
+- 点开会话只清除"该会话"的颜色贡献；同一颜色的**所有**会话都点开后该颜色才消失。
+- 子代理会话的任何状态都不参与变色；手动取消（abort）不算失败。
+- 快速验收：任意让一个会话等待审批 → 图标变黄；打开该会话 → 图标恢复。
+
+> [!NOTE]
+> 颜色状态由 Host 内存维护：刷新页面后自动恢复当前状态；重启 `dsh web` 后状态机清零，状态随新事件重新建立。
+
 ---
 
 ## ⚙️ 配置说明
@@ -123,6 +143,7 @@ dsh plugin --profile web remove dsh-notifications
 | `taskSucceededEnabled` | `true` | 任务成功通知 |
 | `taskFailedEnabled` | `true` | 任务失败通知 |
 | `subagentTaskEndedEnabled` | `true` | 子代理任务成功或失败通知；关闭后不影响顶层任务通知 |
+| `faviconEnabled` | `true` | 标签页鲸鱼图标状态变化总开关；与消息通知总开关相互独立 |
 
 浏览器权限不写入 DSH 配置，由浏览器按 DSH origin 独立保存。
 
@@ -138,6 +159,13 @@ flowchart LR
     F --> L["多标签页负责人选举"]
     L --> N["Web Notification API"]
     N --> O["点击后 sessions.open"]
+    E --> T["Host 状态机<br/>（仅非子代理会话）"]
+    T --> S2["SSE state 帧<br/>（黄/红聚合）"]
+    S2 --> V["客户端聚合<br/>黄＞红＞绿"]
+    B["会话列表 completed"] --> V
+    V --> I["favicon 图标着色"]
+    U["点开会话（current 变化）"] --> P["POST /api/viewed"]
+    P --> T
 ```
 
 Host 订阅 DSH `session/event`，只将事件归一化为以下安全结构：
@@ -158,8 +186,11 @@ Host 订阅 DSH `session/event`，只将事件归一化为以下安全结构：
 | `GET` | `/dsh-notifications/api/config` | 读取配置与 revision |
 | `POST` | `/dsh-notifications/api/config` | 保存或恢复默认配置 |
 | `GET` | `/dsh-notifications/api/events` | SSE 通知事件流 |
+| `POST` | `/dsh-notifications/api/viewed` | 上报已打开的会话，清除其图标颜色贡献 |
 
 SSE 仅在连接短暂中断时补发事件：Host 内存最多保存 256 条、5 分钟；首次连接和 Host 重启后不回放历史事件。
+
+图标状态机基于事件流维护每个**非子代理**会话的「待处理 / 失败 / 完成 / 已查看」状态：`approval/asked ↔ approval/decided`、提问工具 `tool/call ↔ tool/result`、`turn/start`（新一轮重置全部状态）、`turn/end`（error → 失败，completed → 完成，aborted → 中性）。客户端在页面加载或切换会话时调用 `viewed` 上报，Host 按 **黄＞红＞绿** 计算聚合 `state` 帧并随 SSE 广播；客户端再叠加会话列表中「已完成且未查看」的绿色，最终把鲸鱼 SVG 改色后写回 favicon。
 
 ---
 
@@ -174,12 +205,15 @@ pnpm check
 
 事件分类器采用显式结构契约：审批或提问必须是对应的 pending/request 事件，结构化提问也支持 `tool/call` 中的 `request_user_input` 等明确工具名；普通 assistant 文本不会按问号识别。`turn/end` 默认为成功，明确的失败结果映射为失败，取消和中止不通知。子代理通过 DSH 官方会话元数据 `origin: "subagent"` 或正数 `delegationDepth` 识别，不通过标题或 DOM 文本推断。
 
+图标状态机（`lib/state.js`）采用相同的键控幂等与单调序列守卫设计：审批与提问按 id/callId 配对消耗，重复或乱序事件是安全空操作；「已查看」标记幂等持久，直到该会话新一轮 `turn/start` 才重置。
+
 ---
 
 ## ⚠️ 已知限制
 
 - DSH 尚未公开完整事件 schema。插件会在 debug 日志中仅记录未知事件的类型和字段名，便于升级适配，不记录字段值。
 - 如果目标 DSH 版本没有为某类状态提供官方事件，该类通知不会触发；插件不会通过 DOM 文案或 CSS 选择器猜测状态。
+- 鲸鱼图标变色依赖页面 favicon（`/favicon.svg`）：favicon 缺失或加载失败时图标保持默认色，不阻塞其他功能。
 - Firefox 和 Safari 未列入首版验收范围。
 - 不提供原生 Node 通知、浏览器关闭后的推送、自定义通知音或外部消息渠道。
 - 多标签页采用 BroadcastChannel，并在不支持时用短期 localStorage 租约兜底；极端浏览器崩溃后最多等待约 6 秒重新选举。

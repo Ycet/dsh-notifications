@@ -31,8 +31,10 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var client_exports = {};
 __export(client_exports, {
   apply: () => apply,
+  createFaviconController: () => createFaviconController,
   createLeaderElector: () => createLeaderElector,
   createNotificationController: () => createNotificationController,
+  createStateController: () => createStateController,
   inject: () => inject
 });
 module.exports = __toCommonJS(client_exports);
@@ -66,13 +68,18 @@ function shouldSurfaceEvent({ config, event, permission, visibilityState, docume
 }
 
 // src/client.js
-var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVENTS_PATH = "/dsh-notifications/api/events", DEFAULTS = Object.freeze({
+var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVENTS_PATH = "/dsh-notifications/api/events", VIEWED_PATH = "/dsh-notifications/api/viewed", DEFAULTS = Object.freeze({
   enabled: !0,
   approvalPendingEnabled: !0,
   questionPendingEnabled: !0,
   taskSucceededEnabled: !0,
   taskFailedEnabled: !0,
-  subagentTaskEndedEnabled: !0
+  subagentTaskEndedEnabled: !0,
+  faviconEnabled: !0
+}), FAVICON_COLORS = Object.freeze({
+  yellow: "F5C518",
+  red: "E5484D",
+  green: "30A46C"
 }), FLAG_BY_TYPE = Object.freeze({
   approval_pending: "approvalPendingEnabled",
   question_pending: "questionPendingEnabled",
@@ -93,6 +100,9 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
   failedDesc: "\u4EFB\u52A1\u5F02\u5E38\u7ED3\u675F\u65F6\u901A\u77E5\u3002",
   subagentEnded: "\u5B50\u4EE3\u7406\u4EFB\u52A1\u7ED3\u675F",
   subagentEndedDesc: "\u5B50\u4EE3\u7406\u4EFB\u52A1\u6210\u529F\u6216\u5931\u8D25\u65F6\u901A\u77E5\u3002",
+  favicon: "\u9CB8\u9C7C\u56FE\u6807\u72B6\u6001\u53D8\u5316",
+  faviconDesc: "\u4F1A\u8BDD\u5F85\u5904\u7406\u3001\u5931\u8D25\u6216\u5B8C\u6210\u65F6\u6539\u53D8\u6807\u7B7E\u9875\u9CB8\u9C7C\u56FE\u6807\u989C\u8272\u3002",
+  faviconLegend: "\u989C\u8272\u4F18\u5148\u7EA7\uFF1A\u9EC4\uFF08\u5F85\u5BA1\u6279/\u5F85\u56DE\u7B54\uFF09\uFF1E\u7EA2\uFF08\u5931\u8D25\uFF09\uFF1E\u7EFF\uFF08\u5DF2\u5B8C\u6210\uFF0C\u672A\u67E5\u770B\uFF09\uFF1B\u70B9\u5F00\u5BF9\u5E94\u4F1A\u8BDD\u540E\u6062\u590D\u9ED8\u8BA4\u8272\u3002",
   permission: "\u6D4F\u89C8\u5668\u6743\u9650",
   permissionDesc: "\u901A\u77E5\u6743\u9650\u7531\u5F53\u524D\u6D4F\u89C8\u5668\u6309 DSH \u5730\u5740\u7BA1\u7406\u3002",
   permissionUnsupported: "\u4E0D\u652F\u6301",
@@ -136,6 +146,9 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
   failedDesc: "Notify when a task ends with an error.",
   subagentEnded: "Subagent task ended",
   subagentEndedDesc: "Notify when a subagent task succeeds or fails.",
+  favicon: "Favicon status indicator",
+  faviconDesc: "Recolor the tab whale icon when sessions are pending, failed, or completed.",
+  faviconLegend: "Color priority: yellow (pending) > red (failed) > green (completed, unviewed); opening the matching conversation restores the default.",
   permission: "Browser permission",
   permissionDesc: "Permission is managed by this browser for the current DSH origin.",
   permissionUnsupported: "Unsupported",
@@ -177,6 +190,7 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
 .dsh-notify-permission{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.dsh-notify-badge{border-radius:5px;padding:2px 7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.dsh-notify-badge[data-state=granted]{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent)}.dsh-notify-badge[data-state=denied],.dsh-notify-badge[data-state=unsupported]{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent)}
 .dsh-notify-actions{border-top:1px solid var(--dsw-alias-border-l2);display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;flex-wrap:wrap}.dsh-notify-actions button,.dsh-notify-permission button{border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer}.dsh-notify-actions button[data-primary=true]{border-color:transparent;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dsh-notify-actions button:disabled,.dsh-notify-permission button:disabled{opacity:.4;cursor:default}.dsh-notify-actions button:focus-visible,.dsh-notify-permission button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .dsh-notify-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin:0}.dsh-notify-status[data-error=true]{color:var(--dsw-alias-state-error-primary)}
+.dsh-notify-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0 2px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}.dsh-notify-legendDot{width:14px;height:14px;border-radius:4px;flex:none}
 @media (max-width:720px){.dsh-notify-row{align-items:flex-start;flex-direction:column;gap:8px}.dsh-notify-permission{justify-content:flex-start}}
 @media (prefers-reduced-motion:reduce){.dsh-notify-card,.dsh-notify-chevron,.dsh-notify-switch span{transition:none}}
 `;
@@ -294,8 +308,108 @@ function notificationTitle(t, type) {
     task_failed: "notificationFailed"
   }[type]);
 }
-function createNotificationController(ctx, store, t) {
-  let seen = /* @__PURE__ */ new Set(), leader = createLeaderElector(), source, remember = (id) => {
+function createFaviconController() {
+  let link = null, originalHref = "", template = null, warned = !1, findLink = () => (link && link.isConnected || (link = document.querySelector('link[rel="icon"]')), link), loadTemplate = async () => {
+    let current = findLink();
+    if (!current || typeof current.href != "string" || current.href === "") return null;
+    let href = current.href.startsWith("data:") && originalHref !== "" ? originalHref : current.href;
+    if (template === null || originalHref !== href) {
+      let response = await fetch(href);
+      if (!response.ok) return null;
+      let text = await response.text();
+      if (!/<svg[\s\S]*<\/svg>/i.test(text)) return null;
+      originalHref = href, template = text.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/fill="#0{3}(?:0{3})?"/gi, 'fill="__DSH_FILL__"');
+    }
+    return template;
+  };
+  return {
+    async apply(level) {
+      if (level !== "yellow" && level !== "red" && level !== "green") {
+        let current = findLink();
+        current && originalHref !== "" && current.href !== originalHref && (current.href = originalHref);
+        return;
+      }
+      try {
+        let source = await loadTemplate();
+        if (source === null || !source.includes("__DSH_FILL__")) {
+          warned || (warned = !0, console.warn("[dsh-notifications] favicon has no recolorable fill, keeping the default icon"));
+          return;
+        }
+        let svg = source.replaceAll("__DSH_FILL__", `#${FAVICON_COLORS[level]}`), url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, current = findLink();
+        current && current.href !== url && (current.href = url), warned = !1;
+      } catch (error) {
+        warned || (warned = !0, console.warn("[dsh-notifications] favicon update failed", error));
+      }
+    }
+  };
+}
+function createStateController({ controller, store, sessions }) {
+  let yellow = !1, red = !1, green = !1, lastCurrentId, apply2 = () => {
+    if (store.getSnapshot().value.faviconEnabled !== !0) {
+      controller.apply(null);
+      return;
+    }
+    controller.apply(yellow ? "yellow" : red ? "red" : green ? "green" : null);
+  }, refreshGreen = () => {
+    let next = !1;
+    try {
+      let byId = sessions.list.getSnapshot().byId || {};
+      for (let id of Object.keys(byId)) {
+        let row = byId[id];
+        if (row && row.completed === !0 && row.origin !== "subagent") {
+          next = !0;
+          break;
+        }
+      }
+    } catch {
+    }
+    next !== green && (green = next, apply2());
+  }, watchCurrent = () => {
+    let current;
+    try {
+      current = sessions.list.getSnapshot().current;
+    } catch {
+      return;
+    }
+    if (typeof current == "string" && current !== "" && current !== lastCurrentId) {
+      let body = JSON.stringify({ sessionId: current });
+      fetch(VIEWED_PATH, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body
+      }).catch(() => {
+      });
+    }
+    lastCurrentId = current;
+  };
+  return {
+    handleState(message) {
+      try {
+        let payload = JSON.parse(message.data), nextYellow = payload?.level === "yellow", nextRed = payload?.level === "red";
+        (nextYellow !== yellow || nextRed !== red) && (yellow = nextYellow, red = nextRed, apply2());
+      } catch {
+      }
+    },
+    start() {
+      let disposers = [store.subscribe(() => apply2())];
+      try {
+        disposers.push(sessions.list.subscribe(() => {
+          refreshGreen(), watchCurrent();
+        }));
+      } catch {
+      }
+      return refreshGreen(), watchCurrent(), () => disposers.forEach((dispose) => {
+        try {
+          dispose();
+        } catch {
+        }
+      });
+    }
+  };
+}
+function createNotificationController(ctx, store, t, options = {}) {
+  let seen = /* @__PURE__ */ new Set(), leader = createLeaderElector(), source, onState = typeof options.onState == "function" ? options.onState : null, onDispose = typeof options.onDispose == "function" ? options.onDispose : null, remember = (id) => {
     seen.add(id), seen.size > 512 && seen.delete(seen.values().next().value);
   }, shouldNotify = (event) => {
     let current;
@@ -330,14 +444,16 @@ function createNotificationController(ctx, store, t) {
   };
   return {
     start() {
-      return typeof EventSource != "function" ? () => leader.dispose() : (source = new EventSource(EVENTS_PATH), source.addEventListener("notification", (message) => {
+      return typeof EventSource != "function" ? () => {
+        leader.dispose(), onDispose?.();
+      } : (source = new EventSource(EVENTS_PATH), source.addEventListener("notification", (message) => {
         try {
           handle(JSON.parse(message.data));
         } catch (error) {
           console.warn("[dsh-notifications] invalid event", error);
         }
-      }), () => {
-        source?.close(), leader.dispose();
+      }), onState !== null && source.addEventListener("state", onState), () => {
+        source?.close(), leader.dispose(), onDispose?.();
       });
     },
     test() {
@@ -440,6 +556,15 @@ function SettingsCard({ store, controller, t }) {
       h(ToggleRow, { title: t("succeeded"), description: t("succeededDesc"), checked: draft.taskSucceededEnabled, disabled: !draft.enabled, onChange: (value) => patch("taskSucceededEnabled", value) }),
       h(ToggleRow, { title: t("failed"), description: t("failedDesc"), checked: draft.taskFailedEnabled, disabled: !draft.enabled, onChange: (value) => patch("taskFailedEnabled", value) }),
       h(ToggleRow, { title: t("subagentEnded"), description: t("subagentEndedDesc"), checked: draft.subagentTaskEndedEnabled, disabled: !draft.enabled, onChange: (value) => patch("subagentTaskEndedEnabled", value) }),
+      h(ToggleRow, { title: t("favicon"), description: t("faviconDesc"), checked: draft.faviconEnabled, onChange: (value) => patch("faviconEnabled", value) }),
+      h(
+        "div",
+        { className: "dsh-notify-legend" },
+        h("span", { className: "dsh-notify-legendDot", style: { background: "#F5C518" } }),
+        h("span", { className: "dsh-notify-legendDot", style: { background: "#E5484D" } }),
+        h("span", { className: "dsh-notify-legendDot", style: { background: "#30A46C" } }),
+        h("span", null, t("faviconLegend"))
+      ),
       h(
         "div",
         { className: "dsh-notify-row" },
@@ -468,11 +593,13 @@ var inject = ["slots", "locale", "sessions"];
 function apply(ctx) {
   let store = createConfigStore();
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-notifications: locale");
-  let t = ctx.locale.bind(NS), controller = createNotificationController(ctx, store, t);
+  let t = ctx.locale.bind(NS), favicon = createFaviconController(), stateController = createStateController({ controller: favicon, store, sessions: ctx.sessions }), controller = createNotificationController(ctx, store, t, {
+    onState: (message) => stateController.handleState(message)
+  });
   ctx.effect(() => {
     let tag = document.createElement("style");
     return tag.dataset.plugin = "dsh-notifications", tag.textContent = CSS, document.head.appendChild(tag), () => tag.remove();
-  }, "dsh-notifications: styles"), ctx.effect(() => controller.start(), "dsh-notifications: event stream"), ctx.slots.inject("settings.plugin.item", () => ctx.slots.register({
+  }, "dsh-notifications: styles"), ctx.effect(() => controller.start(), "dsh-notifications: event stream"), ctx.effect(() => stateController.start(), "dsh-notifications: favicon state"), ctx.slots.inject("settings.plugin.item", () => ctx.slots.register({
     name: "settings.plugin.item",
     key: "dsh-notifications",
     id: "notifications",

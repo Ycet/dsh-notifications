@@ -1,6 +1,7 @@
 import z from "schemastery";
 import { createEventClassifier, eventContract } from "./lib/classifier.js";
 import { createEventHub } from "./lib/event-hub.js";
+import { createStateTracker } from "./lib/state.js";
 
 export const name = "dsh-notifications";
 export const inject = ["webServer", "settings"];
@@ -12,7 +13,8 @@ export const DEFAULTS = Object.freeze({
   questionPendingEnabled: true,
   taskSucceededEnabled: true,
   taskFailedEnabled: true,
-  subagentTaskEndedEnabled: true
+  subagentTaskEndedEnabled: true,
+  faviconEnabled: true
 });
 
 export const SettingsSchema = z.object({
@@ -21,11 +23,13 @@ export const SettingsSchema = z.object({
   questionPendingEnabled: z.boolean().default(DEFAULTS.questionPendingEnabled),
   taskSucceededEnabled: z.boolean().default(DEFAULTS.taskSucceededEnabled),
   taskFailedEnabled: z.boolean().default(DEFAULTS.taskFailedEnabled),
-  subagentTaskEndedEnabled: z.boolean().default(DEFAULTS.subagentTaskEndedEnabled)
+  subagentTaskEndedEnabled: z.boolean().default(DEFAULTS.subagentTaskEndedEnabled),
+  faviconEnabled: z.boolean().default(DEFAULTS.faviconEnabled)
 });
 
 export const CONFIG_PATH = "/dsh-notifications/api/config";
 export const EVENTS_PATH = "/dsh-notifications/api/events";
+export const VIEWED_PATH = "/dsh-notifications/api/viewed";
 const FLAG_BY_TYPE = Object.freeze({
   approval_pending: "approvalPendingEnabled",
   question_pending: "questionPendingEnabled",
@@ -131,8 +135,18 @@ export function apply(ctx) {
   catch (error) { ctx.logger?.warn?.(`dsh-notifications: settings registration failed: ${String(error)}`); }
 
   const classifier = createEventClassifier();
+  const tracker = createStateTracker();
   const hub = createEventHub();
   const diagnostics = new Map();
+  let lastLevel = null;
+
+  const broadcast = () => {
+    const level = tracker.aggregate();
+    if (level !== lastLevel) {
+      lastLevel = level;
+      hub.publishState(level);
+    }
+  };
 
   const offSession = ctx.on("session/event", (session, event) => {
     const sessionId = session?.id;
@@ -140,6 +154,10 @@ export function apply(ctx) {
     try {
       const notification = classifier.classify(sessionId, event);
       if (notification !== undefined && notificationEnabled(configOf(scope), notification.type, session)) hub.publish(notification);
+      if (!isSubagentSession(session)) {
+        tracker.apply(sessionId, event);
+        broadcast();
+      }
       if (notification === undefined && typeof event?.type === "string") {
         const previous = diagnostics.get(event.type) || 0;
         if (Date.now() - previous > 5 * 60 * 1000) {
@@ -154,7 +172,11 @@ export function apply(ctx) {
   });
 
   const offDisposed = ctx.on("session/disposed", (session) => {
-    if (typeof session?.id === "string") classifier.disposeSession(session.id);
+    if (typeof session?.id === "string") {
+      classifier.disposeSession(session.id);
+      tracker.disposeSession(session.id);
+      broadcast();
+    }
   });
 
   ctx.effect(() => {
@@ -182,6 +204,24 @@ export function apply(ctx) {
         }
       }
     });
+    const offViewed = ctx.webServer.register({
+      kind: "exact",
+      path: VIEWED_PATH,
+      handler: async (req, res) => {
+        if (!trustedRequest(req, ctx)) return sendJson(res, 403, { ok: false, error: { code: "forbidden", message: "forbidden" } });
+        if (req.method !== "POST") return sendJson(res, 405, { ok: false, error: { code: "method-error", message: "method not allowed" } });
+        try {
+          const body = await readJson(req);
+          const sessionId = isPlainObject(body) && typeof body.sessionId === "string" ? body.sessionId : "";
+          if (sessionId === "") return sendJson(res, 400, { ok: false, error: { code: "invalid-body", message: "sessionId is required" } });
+          tracker.markViewed(sessionId);
+          broadcast();
+          return sendJson(res, 200, { ok: true, level: lastLevel });
+        } catch (error) {
+          return sendJson(res, 400, { ok: false, error: { code: "invalid-body", message: error instanceof Error ? error.message : String(error) } });
+        }
+      }
+    });
     const offEvents = ctx.webServer.register({
       kind: "exact",
       path: EVENTS_PATH,
@@ -193,6 +233,7 @@ export function apply(ctx) {
     });
     return () => {
       offEvents();
+      offViewed();
       offConfig();
       hub.close();
       offSession();

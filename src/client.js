@@ -4,13 +4,21 @@ import { shouldSurfaceEvent } from "../lib/client-policy.js";
 const NS = "dshNotifications";
 const CONFIG_PATH = "/dsh-notifications/api/config";
 const EVENTS_PATH = "/dsh-notifications/api/events";
+const VIEWED_PATH = "/dsh-notifications/api/viewed";
 const DEFAULTS = Object.freeze({
   enabled: true,
   approvalPendingEnabled: true,
   questionPendingEnabled: true,
   taskSucceededEnabled: true,
   taskFailedEnabled: true,
-  subagentTaskEndedEnabled: true
+  subagentTaskEndedEnabled: true,
+  faviconEnabled: true
+});
+
+const FAVICON_COLORS = Object.freeze({
+  yellow: "F5C518",
+  red: "E5484D",
+  green: "30A46C"
 });
 
 const FLAG_BY_TYPE = Object.freeze({
@@ -35,6 +43,9 @@ const zh = {
   failedDesc: "任务异常结束时通知。",
   subagentEnded: "子代理任务结束",
   subagentEndedDesc: "子代理任务成功或失败时通知。",
+  favicon: "鲸鱼图标状态变化",
+  faviconDesc: "会话待处理、失败或完成时改变标签页鲸鱼图标颜色。",
+  faviconLegend: "颜色优先级：黄（待审批/待回答）＞红（失败）＞绿（已完成，未查看）；点开对应会话后恢复默认色。",
   permission: "浏览器权限",
   permissionDesc: "通知权限由当前浏览器按 DSH 地址管理。",
   permissionUnsupported: "不支持",
@@ -80,6 +91,9 @@ const en = {
   failedDesc: "Notify when a task ends with an error.",
   subagentEnded: "Subagent task ended",
   subagentEndedDesc: "Notify when a subagent task succeeds or fails.",
+  favicon: "Favicon status indicator",
+  faviconDesc: "Recolor the tab whale icon when sessions are pending, failed, or completed.",
+  faviconLegend: "Color priority: yellow (pending) > red (failed) > green (completed, unviewed); opening the matching conversation restores the default.",
   permission: "Browser permission",
   permissionDesc: "Permission is managed by this browser for the current DSH origin.",
   permissionUnsupported: "Unsupported",
@@ -123,6 +137,7 @@ const CSS = `
 .dsh-notify-permission{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.dsh-notify-badge{border-radius:5px;padding:2px 7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.dsh-notify-badge[data-state=granted]{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent)}.dsh-notify-badge[data-state=denied],.dsh-notify-badge[data-state=unsupported]{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent)}
 .dsh-notify-actions{border-top:1px solid var(--dsw-alias-border-l2);display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;flex-wrap:wrap}.dsh-notify-actions button,.dsh-notify-permission button{border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer}.dsh-notify-actions button[data-primary=true]{border-color:transparent;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dsh-notify-actions button:disabled,.dsh-notify-permission button:disabled{opacity:.4;cursor:default}.dsh-notify-actions button:focus-visible,.dsh-notify-permission button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .dsh-notify-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin:0}.dsh-notify-status[data-error=true]{color:var(--dsw-alias-state-error-primary)}
+.dsh-notify-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0 2px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}.dsh-notify-legendDot{width:14px;height:14px;border-radius:4px;flex:none}
 @media (max-width:720px){.dsh-notify-row{align-items:flex-start;flex-direction:column;gap:8px}.dsh-notify-permission{justify-content:flex-start}}
 @media (prefers-reduced-motion:reduce){.dsh-notify-card,.dsh-notify-chevron,.dsh-notify-switch span{transition:none}}
 `;
@@ -255,10 +270,142 @@ function notificationTitle(t, type) {
   }[type]);
 }
 
-export function createNotificationController(ctx, store, t) {
+/**
+ * Recolors the page favicon (the DSH whale) by rewriting the served SVG's
+ * fill color into a data URL. The original SVG is fetched once and cached;
+ * restore() switches back to the original href. Failures keep the default
+ * icon and warn once.
+ */
+export function createFaviconController() {
+  let link = null;
+  let originalHref = "";
+  let template = null;
+  let warned = false;
+
+  const findLink = () => {
+    if (link && link.isConnected) return link;
+    link = document.querySelector('link[rel="icon"]');
+    return link;
+  };
+
+  const loadTemplate = async () => {
+    const current = findLink();
+    if (!current || typeof current.href !== "string" || current.href === "") return null;
+    const href = current.href.startsWith("data:") && originalHref !== "" ? originalHref : current.href;
+    if (template === null || originalHref !== href) {
+      const response = await fetch(href);
+      if (!response.ok) return null;
+      const text = await response.text();
+      if (!/<svg[\s\S]*<\/svg>/i.test(text)) return null;
+      originalHref = href;
+      template = text
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/fill="#0{3}(?:0{3})?"/gi, 'fill="__DSH_FILL__"');
+    }
+    return template;
+  };
+
+  return {
+    async apply(level) {
+      if (level !== "yellow" && level !== "red" && level !== "green") {
+        const current = findLink();
+        if (current && originalHref !== "" && current.href !== originalHref) current.href = originalHref;
+        return;
+      }
+      try {
+        const source = await loadTemplate();
+        if (source === null || !source.includes("__DSH_FILL__")) {
+          if (!warned) { warned = true; console.warn("[dsh-notifications] favicon has no recolorable fill, keeping the default icon"); }
+          return;
+        }
+        const svg = source.replaceAll("__DSH_FILL__", `#${FAVICON_COLORS[level]}`);
+        const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+        const current = findLink();
+        if (current && current.href !== url) current.href = url;
+        warned = false;
+      } catch (error) {
+        if (!warned) { warned = true; console.warn("[dsh-notifications] favicon update failed", error); }
+      }
+    }
+  };
+}
+
+/**
+ * Combines host-pushed pending/failed levels (SSE "state" events) with the
+ * client-side "completed and unviewed" sessions from the live session list.
+ * Reports opened sessions (current changes) to the host so their color
+ * contribution clears. Priority yellow > red > green is applied last.
+ */
+export function createStateController({ controller, store, sessions }) {
+  let yellow = false;
+  let red = false;
+  let green = false;
+  let lastCurrentId;
+
+  const apply = () => {
+    if (store.getSnapshot().value.faviconEnabled !== true) {
+      controller.apply(null);
+      return;
+    }
+    controller.apply(yellow ? "yellow" : red ? "red" : green ? "green" : null);
+  };
+
+  const refreshGreen = () => {
+    let next = false;
+    try {
+      const byId = sessions.list.getSnapshot().byId || {};
+      for (const id of Object.keys(byId)) {
+        const row = byId[id];
+        if (row && row.completed === true && row.origin !== "subagent") { next = true; break; }
+      }
+    } catch {}
+    if (next !== green) { green = next; apply(); }
+  };
+
+  const watchCurrent = () => {
+    let current;
+    try { current = sessions.list.getSnapshot().current; } catch { return; }
+    if (typeof current === "string" && current !== "" && current !== lastCurrentId) {
+      const body = JSON.stringify({ sessionId: current });
+      fetch(VIEWED_PATH, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body
+      }).catch(() => {});
+    }
+    lastCurrentId = current;
+  };
+
+  return {
+    handleState(message) {
+      try {
+        const payload = JSON.parse(message.data);
+        const nextYellow = payload?.level === "yellow";
+        const nextRed = payload?.level === "red";
+        if (nextYellow !== yellow || nextRed !== red) {
+          yellow = nextYellow;
+          red = nextRed;
+          apply();
+        }
+      } catch {}
+    },
+    start() {
+      const disposers = [store.subscribe(() => apply())];
+      try { disposers.push(sessions.list.subscribe(() => { refreshGreen(); watchCurrent(); })); } catch {}
+      refreshGreen();
+      watchCurrent();
+      return () => disposers.forEach((dispose) => { try { dispose(); } catch {} });
+    }
+  };
+}
+
+export function createNotificationController(ctx, store, t, options = {}) {
   const seen = new Set();
   const leader = createLeaderElector();
   let source;
+  const onState = typeof options.onState === "function" ? options.onState : null;
+  const onDispose = typeof options.onDispose === "function" ? options.onDispose : null;
 
   const remember = (id) => {
     seen.add(id);
@@ -303,15 +450,17 @@ export function createNotificationController(ctx, store, t) {
 
   return {
     start() {
-      if (typeof EventSource !== "function") return () => leader.dispose();
+      if (typeof EventSource !== "function") return () => { leader.dispose(); onDispose?.(); };
       source = new EventSource(EVENTS_PATH);
       source.addEventListener("notification", (message) => {
         try { handle(JSON.parse(message.data)); }
         catch (error) { console.warn("[dsh-notifications] invalid event", error); }
       });
+      if (onState !== null) source.addEventListener("state", onState);
       return () => {
         source?.close();
         leader.dispose();
+        onDispose?.();
       };
     },
     test() {
@@ -414,6 +563,13 @@ function SettingsCard({ store, controller, t }) {
       h(ToggleRow, { title: t("succeeded"), description: t("succeededDesc"), checked: draft.taskSucceededEnabled, disabled: !draft.enabled, onChange: (value) => patch("taskSucceededEnabled", value) }),
       h(ToggleRow, { title: t("failed"), description: t("failedDesc"), checked: draft.taskFailedEnabled, disabled: !draft.enabled, onChange: (value) => patch("taskFailedEnabled", value) }),
       h(ToggleRow, { title: t("subagentEnded"), description: t("subagentEndedDesc"), checked: draft.subagentTaskEndedEnabled, disabled: !draft.enabled, onChange: (value) => patch("subagentTaskEndedEnabled", value) }),
+      h(ToggleRow, { title: t("favicon"), description: t("faviconDesc"), checked: draft.faviconEnabled, onChange: (value) => patch("faviconEnabled", value) }),
+      h("div", { className: "dsh-notify-legend" },
+        h("span", { className: "dsh-notify-legendDot", style: { background: "#F5C518" } }),
+        h("span", { className: "dsh-notify-legendDot", style: { background: "#E5484D" } }),
+        h("span", { className: "dsh-notify-legendDot", style: { background: "#30A46C" } }),
+        h("span", null, t("faviconLegend"))
+      ),
       h("div", { className: "dsh-notify-row" },
         h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("permission")), h("span", null, t("permissionDesc"))),
         h("div", { className: "dsh-notify-permission" },
@@ -439,7 +595,11 @@ export function apply(ctx) {
   const store = createConfigStore();
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-notifications: locale");
   const t = ctx.locale.bind(NS);
-  const controller = createNotificationController(ctx, store, t);
+  const favicon = createFaviconController();
+  const stateController = createStateController({ controller: favicon, store, sessions: ctx.sessions });
+  const controller = createNotificationController(ctx, store, t, {
+    onState: (message) => stateController.handleState(message)
+  });
   ctx.effect(() => {
     const tag = document.createElement("style");
     tag.dataset.plugin = "dsh-notifications";
@@ -448,6 +608,7 @@ export function apply(ctx) {
     return () => tag.remove();
   }, "dsh-notifications: styles");
   ctx.effect(() => controller.start(), "dsh-notifications: event stream");
+  ctx.effect(() => stateController.start(), "dsh-notifications: favicon state");
   ctx.slots.inject("settings.plugin.item", () => ctx.slots.register({
     name: "settings.plugin.item",
     key: "dsh-notifications",
