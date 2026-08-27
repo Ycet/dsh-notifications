@@ -8,7 +8,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 test("package exposes a host and web client bundle", async () => {
   const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  assert.equal(pkg.version, "0.2.0");
+  assert.equal(pkg.version, "0.2.2");
   assert.equal(pkg.main, "index.js");
   assert.equal(pkg.exports["./client"], "./client.js");
   assert.equal(pkg.dsh.bundle.patch, "./cordis.patch.yml");

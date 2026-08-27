@@ -66,6 +66,14 @@ function eventEnabled(config, eventType) {
 function shouldSurfaceEvent({ config, event, permission, visibilityState, documentHasFocus = !0, currentSessionId }) {
   return !isNormalizedNotificationEvent(event) || permission !== "granted" || !eventEnabled(config, event.type) ? !1 : visibilityState !== "visible" || documentHasFocus !== !0 || currentSessionId !== event.sessionId;
 }
+function detectPendingPlanReview(byId, currentSessionId) {
+  if (!byId || typeof byId != "object") return !1;
+  for (let id of Object.keys(byId)) {
+    let row = byId[id];
+    if (row && row.pendingInteraction === "plan-review" && row.origin !== "subagent" && id !== currentSessionId) return !0;
+  }
+  return !1;
+}
 
 // src/client.js
 var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVENTS_PATH = "/dsh-notifications/api/events", VIEWED_PATH = "/dsh-notifications/api/viewed", DEFAULTS = Object.freeze({
@@ -103,6 +111,16 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
   favicon: "\u9CB8\u9C7C\u56FE\u6807\u72B6\u6001\u53D8\u5316",
   faviconDesc: "\u4F1A\u8BDD\u5F85\u5904\u7406\u3001\u5931\u8D25\u6216\u5B8C\u6210\u65F6\u6539\u53D8\u6807\u7B7E\u9875\u9CB8\u9C7C\u56FE\u6807\u989C\u8272\u3002",
   faviconLegend: "\u989C\u8272\u4F18\u5148\u7EA7\uFF1A\u9EC4\uFF08\u5F85\u5BA1\u6279/\u5F85\u56DE\u7B54\uFF09\uFF1E\u7EA2\uFF08\u5931\u8D25\uFF09\uFF1E\u7EFF\uFF08\u5DF2\u5B8C\u6210\uFF0C\u672A\u67E5\u770B\uFF09\uFF1B\u70B9\u5F00\u5BF9\u5E94\u4F1A\u8BDD\u540E\u6062\u590D\u9ED8\u8BA4\u8272\u3002",
+  faviconStatus: "\u5F53\u524D\u56FE\u6807\u72B6\u6001",
+  faviconStatusDesc: "\u5B9E\u65F6\u663E\u793A\u805A\u5408\u72B6\u6001\u4E0E\u7740\u8272\u7ED3\u679C\u3002",
+  favLevelYellow: "\u9EC4\u8272\uFF08\u5F85\u5904\u7406\uFF09",
+  favLevelRed: "\u7EA2\u8272\uFF08\u5931\u8D25\uFF09",
+  favLevelGreen: "\u7EFF\u8272\uFF08\u5DF2\u5B8C\u6210\uFF09",
+  favLevelNone: "\u9ED8\u8BA4\u8272",
+  favLevelDisabled: "\u5DF2\u5173\u95ED",
+  favErrorUnavailable: "favicon \u4E0D\u53EF\u7528",
+  favErrorNoFill: "favicon \u65E0\u53EF\u7528\u7740\u8272\u70B9",
+  favErrorOk: "\u7740\u8272\u6B63\u5E38",
   permission: "\u6D4F\u89C8\u5668\u6743\u9650",
   permissionDesc: "\u901A\u77E5\u6743\u9650\u7531\u5F53\u524D\u6D4F\u89C8\u5668\u6309 DSH \u5730\u5740\u7BA1\u7406\u3002",
   permissionUnsupported: "\u4E0D\u652F\u6301",
@@ -149,6 +167,16 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
   favicon: "Favicon status indicator",
   faviconDesc: "Recolor the tab whale icon when sessions are pending, failed, or completed.",
   faviconLegend: "Color priority: yellow (pending) > red (failed) > green (completed, unviewed); opening the matching conversation restores the default.",
+  faviconStatus: "Current status",
+  faviconStatusDesc: "Live aggregate status and coloring result.",
+  favLevelYellow: "Yellow (pending)",
+  favLevelRed: "Red (failed)",
+  favLevelGreen: "Green (completed)",
+  favLevelNone: "Default",
+  favLevelDisabled: "Disabled",
+  favErrorUnavailable: "favicon unavailable",
+  favErrorNoFill: "no recolorable fill",
+  favErrorOk: "coloring OK",
   permission: "Browser permission",
   permissionDesc: "Permission is managed by this browser for the current DSH origin.",
   permissionUnsupported: "Unsupported",
@@ -188,6 +216,10 @@ var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVEN
 .dsh-notify-rowText{display:flex;min-width:0;flex-direction:column;gap:2px}.dsh-notify-rowText strong{font-size:14px}.dsh-notify-rowText span{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
 .dsh-notify-switch{position:relative;flex:none;width:42px;height:24px;border:0;border-radius:12px;background:var(--dsw-alias-border-l2);cursor:pointer}.dsh-notify-switch[data-active=true]{background:var(--dsw-alias-state-business-primary)}.dsh-notify-switch:disabled{background:var(--dsw-alias-border-l2);cursor:not-allowed}.dsh-notify-switch:disabled[data-active=true]{background:var(--dsw-alias-label-tertiary)}.dsh-notify-switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform 120ms ease}.dsh-notify-switch[data-active=true] span{transform:translateX(18px)}
 .dsh-notify-permission{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.dsh-notify-badge{border-radius:5px;padding:2px 7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.dsh-notify-badge[data-state=granted]{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent)}.dsh-notify-badge[data-state=denied],.dsh-notify-badge[data-state=unsupported]{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent)}
+.dsh-notify-badge[data-fav=yellow]{color:#F5C518;background:color-mix(in srgb,#F5C518 12%,transparent)}
+.dsh-notify-badge[data-fav=red]{color:#E5484D;background:color-mix(in srgb,#E5484D 12%,transparent)}
+.dsh-notify-badge[data-fav=green]{color:#30A46C;background:color-mix(in srgb,#30A46C 12%,transparent)}
+.dsh-notify-badge[data-fav-error=true]{color:var(--dsw-alias-state-error-primary)}
 .dsh-notify-actions{border-top:1px solid var(--dsw-alias-border-l2);display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;flex-wrap:wrap}.dsh-notify-actions button,.dsh-notify-permission button{border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer}.dsh-notify-actions button[data-primary=true]{border-color:transparent;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dsh-notify-actions button:disabled,.dsh-notify-permission button:disabled{opacity:.4;cursor:default}.dsh-notify-actions button:focus-visible,.dsh-notify-permission button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .dsh-notify-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin:0}.dsh-notify-status[data-error=true]{color:var(--dsw-alias-state-error-primary)}
 .dsh-notify-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0 2px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}.dsh-notify-legendDot{width:14px;height:14px;border-radius:4px;flex:none}
@@ -309,7 +341,7 @@ function notificationTitle(t, type) {
   }[type]);
 }
 function createFaviconController() {
-  let link = null, originalHref = "", template = null, warned = !1, findLink = () => (link && link.isConnected || (link = document.querySelector('link[rel="icon"]')), link), loadTemplate = async () => {
+  let link = null, originalHref = "", template = null, warned = !1, lastError = null, findLink = () => (link && link.isConnected || (link = document.querySelector('link[rel="icon"]')), link), loadTemplate = async () => {
     let current = findLink();
     if (!current || typeof current.href != "string" || current.href === "") return null;
     let href = current.href.startsWith("data:") && originalHref !== "" ? originalHref : current.href;
@@ -324,32 +356,40 @@ function createFaviconController() {
   };
   return {
     async apply(level) {
-      if (level !== "yellow" && level !== "red" && level !== "green") {
+      if (lastError = null, level !== "yellow" && level !== "red" && level !== "green") {
         let current = findLink();
         current && originalHref !== "" && current.href !== originalHref && (current.href = originalHref);
         return;
       }
       try {
         let source = await loadTemplate();
-        if (source === null || !source.includes("__DSH_FILL__")) {
-          warned || (warned = !0, console.warn("[dsh-notifications] favicon has no recolorable fill, keeping the default icon"));
+        if (source === null) {
+          lastError = "unavailable", warned || (warned = !0, console.warn("[dsh-notifications] favicon is unavailable, keeping the default icon"));
+          return;
+        }
+        if (!source.includes("__DSH_FILL__")) {
+          lastError = "no-fill", warned || (warned = !0, console.warn("[dsh-notifications] favicon has no recolorable fill, keeping the default icon"));
           return;
         }
         let svg = source.replaceAll("__DSH_FILL__", `#${FAVICON_COLORS[level]}`), url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, current = findLink();
         current && current.href !== url && (current.href = url), warned = !1;
       } catch (error) {
-        warned || (warned = !0, console.warn("[dsh-notifications] favicon update failed", error));
+        lastError = String(error), warned || (warned = !0, console.warn("[dsh-notifications] favicon update failed", error));
       }
+    },
+    getStatus() {
+      return { lastError };
     }
   };
 }
 function createStateController({ controller, store, sessions }) {
-  let yellow = !1, red = !1, green = !1, lastCurrentId, apply2 = () => {
-    if (store.getSnapshot().value.faviconEnabled !== !0) {
-      controller.apply(null);
-      return;
-    }
-    controller.apply(yellow ? "yellow" : red ? "red" : green ? "green" : null);
+  let yellow = !1, red = !1, green = !1, planReviewPending = !1, lastCurrentId, listeners = /* @__PURE__ */ new Set(), currentLevel = () => store.getSnapshot().value.faviconEnabled !== !0 ? null : yellow || planReviewPending ? "yellow" : red ? "red" : green ? "green" : null, apply2 = () => {
+    controller.apply(currentLevel()), listeners.forEach((listener) => {
+      try {
+        listener();
+      } catch {
+      }
+    });
   }, refreshGreen = () => {
     let next = !1;
     try {
@@ -364,6 +404,14 @@ function createStateController({ controller, store, sessions }) {
     } catch {
     }
     next !== green && (green = next, apply2());
+  }, refreshPlanReview = () => {
+    let next = !1;
+    try {
+      let snapshot = sessions.list.getSnapshot();
+      next = detectPendingPlanReview(snapshot.byId || {}, snapshot.current);
+    } catch {
+    }
+    next !== planReviewPending && (planReviewPending = next, apply2());
   }, watchCurrent = () => {
     let current;
     try {
@@ -395,16 +443,22 @@ function createStateController({ controller, store, sessions }) {
       let disposers = [store.subscribe(() => apply2())];
       try {
         disposers.push(sessions.list.subscribe(() => {
-          refreshGreen(), watchCurrent();
+          refreshGreen(), refreshPlanReview(), watchCurrent();
         }));
       } catch {
       }
-      return refreshGreen(), watchCurrent(), () => disposers.forEach((dispose) => {
+      return refreshGreen(), refreshPlanReview(), watchCurrent(), () => disposers.forEach((dispose) => {
         try {
           dispose();
         } catch {
         }
       });
+    },
+    getLevel() {
+      return currentLevel();
+    },
+    subscribe(listener) {
+      return listeners.add(listener), () => listeners.delete(listener);
     }
   };
 }
@@ -499,9 +553,11 @@ function Chevron({ open }) {
 function configsEqual(left, right) {
   return Object.keys(DEFAULTS).every((key) => left[key] === right[key]);
 }
-function SettingsCard({ store, controller, t }) {
-  let snapshot = useStore(store), [draft, setDraft] = import_react.default.useState(snapshot.value), [permission, setPermission] = import_react.default.useState(permissionOf()), [state, setState] = import_react.default.useState({ saving: !1, error: "" }), [open, setOpen] = import_react.default.useState(!1);
-  import_react.default.useEffect(() => setDraft(snapshot.value), [snapshot.value]);
+function SettingsCard({ store, controller, t, stateController, favicon }) {
+  let snapshot = useStore(store), [draft, setDraft] = import_react.default.useState(snapshot.value), [permission, setPermission] = import_react.default.useState(permissionOf()), [state, setState] = import_react.default.useState({ saving: !1, error: "" }), [open, setOpen] = import_react.default.useState(!1), [favState, setFavState] = import_react.default.useState(() => ({ level: stateController.getLevel(), error: favicon.getStatus().lastError }));
+  import_react.default.useEffect(() => setDraft(snapshot.value), [snapshot.value]), import_react.default.useEffect(() => stateController.subscribe(() => {
+    setFavState({ level: stateController.getLevel(), error: favicon.getStatus().lastError });
+  }), [stateController, favicon]);
   let dirty = !configsEqual(draft, snapshot.value), patch = (key, value) => setDraft((current) => ({ ...current, [key]: value })), authorize = async () => {
     setState((current) => ({ ...current, error: "" }));
     try {
@@ -568,6 +624,25 @@ function SettingsCard({ store, controller, t }) {
       h(
         "div",
         { className: "dsh-notify-row" },
+        h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("faviconStatus")), h("span", null, t("faviconStatusDesc"))),
+        h(
+          "div",
+          { className: "dsh-notify-permission" },
+          h(
+            "span",
+            { className: "dsh-notify-badge", "data-fav": favState.level || "none" },
+            t(favState.level ? `favLevel${favState.level[0]?.toUpperCase()}${favState.level.slice(1)}` : snapshot.value.faviconEnabled === !0 ? "favLevelNone" : "favLevelDisabled")
+          ),
+          h(
+            "span",
+            { className: "dsh-notify-badge", "data-fav-error": favState.error ? "true" : void 0 },
+            favState.error ? t(`favError${favState.error === "no-fill" ? "NoFill" : "Unavailable"}`) : t("favErrorOk")
+          )
+        )
+      ),
+      h(
+        "div",
+        { className: "dsh-notify-row" },
         h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("permission")), h("span", null, t("permissionDesc"))),
         h(
           "div",
@@ -604,7 +679,7 @@ function apply(ctx) {
     key: "dsh-notifications",
     id: "notifications",
     order: 70,
-    inject: () => ({ store, controller, t })
+    inject: () => ({ store, controller, t, stateController, favicon })
   }, SettingsCard)), store.load();
 }
 

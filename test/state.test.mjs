@@ -195,3 +195,14 @@ test("question tool name variants are recognized", () => {
   tracker.apply("s1", questionAnswered("c1", 3));
   assert.equal(tracker.aggregate(), null);
 });
+
+test("tool/result nested message.callId clears the question pending", () => {
+  const tracker = createStateTracker();
+  tracker.apply("s1", questionAsked("call-nested", 1));
+  assert.equal(tracker.aggregate(), "yellow");
+  // 真实 DSH 形状：callId 位于 message 内层
+  tracker.apply("s1", { type: "tool/result", seq: 2, data: { turn: 1, step: 2, message: { callId: "call-nested", content: "ok" } } });
+  assert.equal(tracker.aggregate(), null);
+  const entry = tracker.snapshot().find((item) => item.sessionId === "s1");
+  assert.equal(entry.pending.length, 0);
+});

@@ -1,5 +1,5 @@
 import React from "react";
-import { shouldSurfaceEvent } from "../lib/client-policy.js";
+import { detectPendingPlanReview, shouldSurfaceEvent } from "../lib/client-policy.js";
 
 const NS = "dshNotifications";
 const CONFIG_PATH = "/dsh-notifications/api/config";
@@ -46,6 +46,16 @@ const zh = {
   favicon: "鲸鱼图标状态变化",
   faviconDesc: "会话待处理、失败或完成时改变标签页鲸鱼图标颜色。",
   faviconLegend: "颜色优先级：黄（待审批/待回答）＞红（失败）＞绿（已完成，未查看）；点开对应会话后恢复默认色。",
+  faviconStatus: "当前图标状态",
+  faviconStatusDesc: "实时显示聚合状态与着色结果。",
+  favLevelYellow: "黄色（待处理）",
+  favLevelRed: "红色（失败）",
+  favLevelGreen: "绿色（已完成）",
+  favLevelNone: "默认色",
+  favLevelDisabled: "已关闭",
+  favErrorUnavailable: "favicon 不可用",
+  favErrorNoFill: "favicon 无可用着色点",
+  favErrorOk: "着色正常",
   permission: "浏览器权限",
   permissionDesc: "通知权限由当前浏览器按 DSH 地址管理。",
   permissionUnsupported: "不支持",
@@ -94,6 +104,16 @@ const en = {
   favicon: "Favicon status indicator",
   faviconDesc: "Recolor the tab whale icon when sessions are pending, failed, or completed.",
   faviconLegend: "Color priority: yellow (pending) > red (failed) > green (completed, unviewed); opening the matching conversation restores the default.",
+  faviconStatus: "Current status",
+  faviconStatusDesc: "Live aggregate status and coloring result.",
+  favLevelYellow: "Yellow (pending)",
+  favLevelRed: "Red (failed)",
+  favLevelGreen: "Green (completed)",
+  favLevelNone: "Default",
+  favLevelDisabled: "Disabled",
+  favErrorUnavailable: "favicon unavailable",
+  favErrorNoFill: "no recolorable fill",
+  favErrorOk: "coloring OK",
   permission: "Browser permission",
   permissionDesc: "Permission is managed by this browser for the current DSH origin.",
   permissionUnsupported: "Unsupported",
@@ -135,6 +155,10 @@ const CSS = `
 .dsh-notify-rowText{display:flex;min-width:0;flex-direction:column;gap:2px}.dsh-notify-rowText strong{font-size:14px}.dsh-notify-rowText span{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
 .dsh-notify-switch{position:relative;flex:none;width:42px;height:24px;border:0;border-radius:12px;background:var(--dsw-alias-border-l2);cursor:pointer}.dsh-notify-switch[data-active=true]{background:var(--dsw-alias-state-business-primary)}.dsh-notify-switch:disabled{background:var(--dsw-alias-border-l2);cursor:not-allowed}.dsh-notify-switch:disabled[data-active=true]{background:var(--dsw-alias-label-tertiary)}.dsh-notify-switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform 120ms ease}.dsh-notify-switch[data-active=true] span{transform:translateX(18px)}
 .dsh-notify-permission{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.dsh-notify-badge{border-radius:5px;padding:2px 7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.dsh-notify-badge[data-state=granted]{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent)}.dsh-notify-badge[data-state=denied],.dsh-notify-badge[data-state=unsupported]{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent)}
+.dsh-notify-badge[data-fav=yellow]{color:#F5C518;background:color-mix(in srgb,#F5C518 12%,transparent)}
+.dsh-notify-badge[data-fav=red]{color:#E5484D;background:color-mix(in srgb,#E5484D 12%,transparent)}
+.dsh-notify-badge[data-fav=green]{color:#30A46C;background:color-mix(in srgb,#30A46C 12%,transparent)}
+.dsh-notify-badge[data-fav-error=true]{color:var(--dsw-alias-state-error-primary)}
 .dsh-notify-actions{border-top:1px solid var(--dsw-alias-border-l2);display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;flex-wrap:wrap}.dsh-notify-actions button,.dsh-notify-permission button{border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer}.dsh-notify-actions button[data-primary=true]{border-color:transparent;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dsh-notify-actions button:disabled,.dsh-notify-permission button:disabled{opacity:.4;cursor:default}.dsh-notify-actions button:focus-visible,.dsh-notify-permission button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .dsh-notify-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin:0}.dsh-notify-status[data-error=true]{color:var(--dsw-alias-state-error-primary)}
 .dsh-notify-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0 2px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}.dsh-notify-legendDot{width:14px;height:14px;border-radius:4px;flex:none}
@@ -281,6 +305,7 @@ export function createFaviconController() {
   let originalHref = "";
   let template = null;
   let warned = false;
+  let lastError = null;
 
   const findLink = () => {
     if (link && link.isConnected) return link;
@@ -307,6 +332,7 @@ export function createFaviconController() {
 
   return {
     async apply(level) {
+      lastError = null;
       if (level !== "yellow" && level !== "red" && level !== "green") {
         const current = findLink();
         if (current && originalHref !== "" && current.href !== originalHref) current.href = originalHref;
@@ -314,7 +340,13 @@ export function createFaviconController() {
       }
       try {
         const source = await loadTemplate();
-        if (source === null || !source.includes("__DSH_FILL__")) {
+        if (source === null) {
+          lastError = "unavailable";
+          if (!warned) { warned = true; console.warn("[dsh-notifications] favicon is unavailable, keeping the default icon"); }
+          return;
+        }
+        if (!source.includes("__DSH_FILL__")) {
+          lastError = "no-fill";
           if (!warned) { warned = true; console.warn("[dsh-notifications] favicon has no recolorable fill, keeping the default icon"); }
           return;
         }
@@ -324,9 +356,11 @@ export function createFaviconController() {
         if (current && current.href !== url) current.href = url;
         warned = false;
       } catch (error) {
+        lastError = String(error);
         if (!warned) { warned = true; console.warn("[dsh-notifications] favicon update failed", error); }
       }
-    }
+    },
+    getStatus() { return { lastError }; }
   };
 }
 
@@ -340,14 +374,18 @@ export function createStateController({ controller, store, sessions }) {
   let yellow = false;
   let red = false;
   let green = false;
+  let planReviewPending = false;
   let lastCurrentId;
+  const listeners = new Set();
+
+  const currentLevel = () => {
+    if (store.getSnapshot().value.faviconEnabled !== true) return null;
+    return (yellow || planReviewPending) ? "yellow" : red ? "red" : green ? "green" : null;
+  };
 
   const apply = () => {
-    if (store.getSnapshot().value.faviconEnabled !== true) {
-      controller.apply(null);
-      return;
-    }
-    controller.apply(yellow ? "yellow" : red ? "red" : green ? "green" : null);
+    controller.apply(currentLevel());
+    listeners.forEach((listener) => { try { listener(); } catch {} });
   };
 
   const refreshGreen = () => {
@@ -360,6 +398,15 @@ export function createStateController({ controller, store, sessions }) {
       }
     } catch {}
     if (next !== green) { green = next; apply(); }
+  };
+
+  const refreshPlanReview = () => {
+    let next = false;
+    try {
+      const snapshot = sessions.list.getSnapshot();
+      next = detectPendingPlanReview(snapshot.byId || {}, snapshot.current);
+    } catch {}
+    if (next !== planReviewPending) { planReviewPending = next; apply(); }
   };
 
   const watchCurrent = () => {
@@ -392,11 +439,14 @@ export function createStateController({ controller, store, sessions }) {
     },
     start() {
       const disposers = [store.subscribe(() => apply())];
-      try { disposers.push(sessions.list.subscribe(() => { refreshGreen(); watchCurrent(); })); } catch {}
+      try { disposers.push(sessions.list.subscribe(() => { refreshGreen(); refreshPlanReview(); watchCurrent(); })); } catch {}
       refreshGreen();
+      refreshPlanReview();
       watchCurrent();
       return () => disposers.forEach((dispose) => { try { dispose(); } catch {} });
-    }
+    },
+    getLevel() { return currentLevel(); },
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); }
   };
 }
 
@@ -509,13 +559,17 @@ function configsEqual(left, right) {
   return Object.keys(DEFAULTS).every((key) => left[key] === right[key]);
 }
 
-function SettingsCard({ store, controller, t }) {
+function SettingsCard({ store, controller, t, stateController, favicon }) {
   const snapshot = useStore(store);
   const [draft, setDraft] = React.useState(snapshot.value);
   const [permission, setPermission] = React.useState(permissionOf());
   const [state, setState] = React.useState({ saving: false, error: "" });
   const [open, setOpen] = React.useState(false);
+  const [favState, setFavState] = React.useState(() => ({ level: stateController.getLevel(), error: favicon.getStatus().lastError }));
   React.useEffect(() => setDraft(snapshot.value), [snapshot.value]);
+  React.useEffect(() => stateController.subscribe(() => {
+    setFavState({ level: stateController.getLevel(), error: favicon.getStatus().lastError });
+  }), [stateController, favicon]);
   const dirty = !configsEqual(draft, snapshot.value);
   const patch = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const authorize = async () => {
@@ -571,6 +625,15 @@ function SettingsCard({ store, controller, t }) {
         h("span", null, t("faviconLegend"))
       ),
       h("div", { className: "dsh-notify-row" },
+        h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("faviconStatus")), h("span", null, t("faviconStatusDesc"))),
+        h("div", { className: "dsh-notify-permission" },
+          h("span", { className: "dsh-notify-badge", "data-fav": favState.level || "none" },
+            t(favState.level ? `favLevel${favState.level[0]?.toUpperCase()}${favState.level.slice(1)}` : (snapshot.value.faviconEnabled === true ? "favLevelNone" : "favLevelDisabled"))),
+          h("span", { className: "dsh-notify-badge", "data-fav-error": favState.error ? "true" : undefined },
+            favState.error ? t(`favError${favState.error === "no-fill" ? "NoFill" : "Unavailable"}`) : t("favErrorOk"))
+        )
+      ),
+      h("div", { className: "dsh-notify-row" },
         h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("permission")), h("span", null, t("permissionDesc"))),
         h("div", { className: "dsh-notify-permission" },
           h("span", { className: "dsh-notify-badge", "data-state": permission }, t(`permission${permission[0]?.toUpperCase()}${permission.slice(1)}`)),
@@ -614,7 +677,7 @@ export function apply(ctx) {
     key: "dsh-notifications",
     id: "notifications",
     order: 70,
-    inject: () => ({ store, controller, t })
+    inject: () => ({ store, controller, t, stateController, favicon })
   }, SettingsCard));
   void store.load();
 }

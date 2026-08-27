@@ -30,6 +30,7 @@ export const SettingsSchema = z.object({
 export const CONFIG_PATH = "/dsh-notifications/api/config";
 export const EVENTS_PATH = "/dsh-notifications/api/events";
 export const VIEWED_PATH = "/dsh-notifications/api/viewed";
+export const DEBUG_PATH = "/dsh-notifications/api/debug";
 const FLAG_BY_TYPE = Object.freeze({
   approval_pending: "approvalPendingEnabled",
   question_pending: "questionPendingEnabled",
@@ -222,6 +223,15 @@ export function apply(ctx) {
         }
       }
     });
+    const offDebug = ctx.webServer.register({
+      kind: "exact",
+      path: DEBUG_PATH,
+      handler: (req, res) => {
+        if (!trustedRequest(req, ctx)) return sendJson(res, 403, { ok: false, error: { code: "forbidden", message: "forbidden" } });
+        if (req.method !== "GET") return sendJson(res, 405, { ok: false, error: { code: "method-error", message: "method not allowed" } });
+        return sendJson(res, 200, { ok: true, level: lastLevel, clients: hub.clientCount(), sessions: tracker.snapshot() });
+      }
+    });
     const offEvents = ctx.webServer.register({
       kind: "exact",
       path: EVENTS_PATH,
@@ -233,6 +243,7 @@ export function apply(ctx) {
     });
     return () => {
       offEvents();
+      offDebug();
       offViewed();
       offConfig();
       hub.close();

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
-import { apply, CONFIG_PATH, EVENTS_PATH, VIEWED_PATH, isSubagentSession, normalizeConfig, notificationEnabled, trustedRequest } from "../index.js";
+import { apply, CONFIG_PATH, DEBUG_PATH, EVENTS_PATH, VIEWED_PATH, isSubagentSession, normalizeConfig, notificationEnabled, trustedRequest } from "../index.js";
 
 test("normalizes incomplete configuration to defaults", () => {
   assert.deepEqual(normalizeConfig({ enabled: false }), {
@@ -179,5 +179,31 @@ test("favicon state machine broadcasts levels over SSE and the viewed route clea
   assert.equal(JSON.parse(write.body).value.faviconEnabled, false);
 
   closeStream();
+  runtime.dispose();
+});
+
+test("debug endpoint exposes the tracker snapshot", async () => {
+  const runtime = mockContext();
+  apply(runtime.ctx);
+  const read = new MockResponse();
+  await runtime.routes.get(DEBUG_PATH)(new MockRequest("GET"), read);
+  assert.equal(read.status, 200);
+  const body = JSON.parse(read.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.level, null);
+  assert.ok(Array.isArray(body.sessions));
+
+  // 触发一个 pending 事件后，快照应反映状态
+  const emit = (session, event) => (runtime.handlers.get("session/event") || []).forEach((handler) => handler(session, event));
+  emit({ id: "s9", header: {} }, { type: "approval/asked", seq: 1, data: { id: "approval-9" } });
+  const after = new MockResponse();
+  await runtime.routes.get(DEBUG_PATH)(new MockRequest("GET"), after);
+  const snapshot = JSON.parse(after.body);
+  assert.equal(snapshot.level, "yellow");
+  assert.deepEqual(snapshot.sessions.find((item) => item.sessionId === "s9").pending, ["a:approval-9"]);
+
+  const wrongMethod = new MockResponse();
+  await runtime.routes.get(DEBUG_PATH)(new MockRequest("POST", {}), wrongMethod);
+  assert.equal(wrongMethod.status, 405);
   runtime.dispose();
 });
