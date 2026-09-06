@@ -412,6 +412,16 @@ function createStateController({ controller, store, sessions }) {
     } catch {
     }
     next !== planReviewPending && (planReviewPending = next, apply2());
+  }, reportViewed = (sessionId) => {
+    if (typeof sessionId != "string" || sessionId === "") return;
+    let body = JSON.stringify({ sessionId });
+    fetch(VIEWED_PATH, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body
+    }).catch(() => {
+    });
   }, watchCurrent = () => {
     let current;
     try {
@@ -419,17 +429,15 @@ function createStateController({ controller, store, sessions }) {
     } catch {
       return;
     }
-    if (typeof current == "string" && current !== "" && current !== lastCurrentId) {
-      let body = JSON.stringify({ sessionId: current });
-      fetch(VIEWED_PATH, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body
-      }).catch(() => {
-      });
+    typeof current == "string" && current !== "" && current !== lastCurrentId && reportViewed(current), lastCurrentId = current;
+  }, reportCurrentViewed = () => {
+    let current;
+    try {
+      current = sessions.list.getSnapshot().current;
+    } catch {
+      return;
     }
-    lastCurrentId = current;
+    reportViewed(current);
   };
   return {
     handleState(message) {
@@ -447,7 +455,13 @@ function createStateController({ controller, store, sessions }) {
         }));
       } catch {
       }
-      return refreshGreen(), refreshPlanReview(), watchCurrent(), () => disposers.forEach((dispose) => {
+      refreshGreen(), refreshPlanReview(), watchCurrent();
+      let onVisibility = () => {
+        document.visibilityState === "visible" && reportCurrentViewed();
+      }, onFocus = () => reportCurrentViewed();
+      return typeof document?.addEventListener == "function" && typeof window?.addEventListener == "function" && (document.addEventListener("visibilitychange", onVisibility), window.addEventListener("focus", onFocus), disposers.push(() => {
+        document.removeEventListener("visibilitychange", onVisibility), window.removeEventListener("focus", onFocus);
+      })), () => disposers.forEach((dispose) => {
         try {
           dispose();
         } catch {

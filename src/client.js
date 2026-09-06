@@ -409,19 +409,28 @@ export function createStateController({ controller, store, sessions }) {
     if (next !== planReviewPending) { planReviewPending = next; apply(); }
   };
 
+  const reportViewed = (sessionId) => {
+    if (typeof sessionId !== "string" || sessionId === "") return;
+    const body = JSON.stringify({ sessionId });
+    fetch(VIEWED_PATH, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body
+    }).catch(() => {});
+  };
+
   const watchCurrent = () => {
     let current;
     try { current = sessions.list.getSnapshot().current; } catch { return; }
-    if (typeof current === "string" && current !== "" && current !== lastCurrentId) {
-      const body = JSON.stringify({ sessionId: current });
-      fetch(VIEWED_PATH, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body
-      }).catch(() => {});
-    }
+    if (typeof current === "string" && current !== "" && current !== lastCurrentId) reportViewed(current);
     lastCurrentId = current;
+  };
+
+  const reportCurrentViewed = () => {
+    let current;
+    try { current = sessions.list.getSnapshot().current; } catch { return; }
+    reportViewed(current);
   };
 
   return {
@@ -443,6 +452,19 @@ export function createStateController({ controller, store, sessions }) {
       refreshGreen();
       refreshPlanReview();
       watchCurrent();
+      // 页面重新获得焦点/回到可见状态时（从其他标签页或应用切回 DSH），
+      // 当前会话视为已打开：上报 viewed 清除其颜色贡献，
+      // 避免"任务完成后切回页面图标仍残留颜色，需切换会话才能恢复"的问题。
+      const onVisibility = () => { if (document.visibilityState === "visible") reportCurrentViewed(); };
+      const onFocus = () => reportCurrentViewed();
+      if (typeof document?.addEventListener === "function" && typeof window?.addEventListener === "function") {
+        document.addEventListener("visibilitychange", onVisibility);
+        window.addEventListener("focus", onFocus);
+        disposers.push(() => {
+          document.removeEventListener("visibilitychange", onVisibility);
+          window.removeEventListener("focus", onFocus);
+        });
+      }
       return () => disposers.forEach((dispose) => { try { dispose(); } catch {} });
     },
     getLevel() { return currentLevel(); },

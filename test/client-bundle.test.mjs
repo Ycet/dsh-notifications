@@ -32,4 +32,6 @@ test("built client carries the favicon status indicator feature", () => {
   assert.match(bundle, /link\[rel=.icon.\]/);
   assert.match(bundle, /__DSH_FILL__/);
   assert.match(bundle, /encodeURIComponent/);
+  assert.match(bundle, /visibilitychange/);
+  assert.match(bundle, /addEventListener\([^)]*"focus"/);
 });
