@@ -215,7 +215,7 @@ export function apply(ctx) {
           const body = await readJson(req);
           const sessionId = isPlainObject(body) && typeof body.sessionId === "string" ? body.sessionId : "";
           if (sessionId === "") return sendJson(res, 400, { ok: false, error: { code: "invalid-body", message: "sessionId is required" } });
-          tracker.markViewed(sessionId);
+          tracker.markViewed(sessionId, { pendingSafe: body.pendingSafe === true });
           broadcast();
           return sendJson(res, 200, { ok: true, level: lastLevel });
         } catch (error) {

@@ -207,3 +207,42 @@ test("debug endpoint exposes the tracker snapshot", async () => {
   assert.equal(wrongMethod.status, 405);
   runtime.dispose();
 });
+
+test("viewed route with pendingSafe keeps pending yellow and clears finished colors", async () => {
+  const runtime = mockContext();
+  apply(runtime.ctx);
+  const emit = (session, event) => (runtime.handlers.get("session/event") || []).forEach((handler) => handler(session, event));
+
+  const stream = new MockResponse();
+  const closeStream = runtime.routes.get(EVENTS_PATH)(new MockRequest("GET"), stream);
+
+  // 会话挂起待审批 → 黄色
+  emit({ id: "s1", header: {} }, { type: "approval/asked", seq: 1, data: { id: "approval-1" } });
+  assert.match(stream.chunks, /"level":"yellow"/);
+
+  // pendingSafe 切回页面（待回答未解决）→ 不转为 null
+  const returnView = new MockResponse();
+  await runtime.routes.get(VIEWED_PATH)(new MockRequest("POST", { sessionId: "s1", pendingSafe: true }), returnView);
+  assert.equal(JSON.parse(returnView.body).ok, true);
+  assert.equal(JSON.parse(returnView.body).level, "yellow");
+  assert.doesNotMatch(stream.chunks, /"level":null/);
+
+  // 明确打开（无 pendingSafe）→ 清除黄色
+  const openView = new MockResponse();
+  await runtime.routes.get(VIEWED_PATH)(new MockRequest("POST", { sessionId: "s1" }), openView);
+  assert.equal(JSON.parse(openView.body).level, null);
+  assert.match(stream.chunks, /"level":null/);
+
+  // 新回合：任务完成 → 绿色；切回页面 pendingSafe → 清除
+  emit({ id: "s1", header: {} }, { type: "turn/start", seq: 2, data: {} });
+  assert.match(stream.chunks, /"level":null/);
+  emit({ id: "s1", header: {} }, { type: "turn/end", seq: 3, data: { reason: { kind: "completed" } } });
+  assert.match(stream.chunks, /"level":"green"/);
+  const returnDone = new MockResponse();
+  await runtime.routes.get(VIEWED_PATH)(new MockRequest("POST", { sessionId: "s1", pendingSafe: true }), returnDone);
+  assert.equal(JSON.parse(returnDone.body).level, null);
+  assert.match(stream.chunks, /"level":null/);
+
+  closeStream();
+  runtime.dispose();
+});

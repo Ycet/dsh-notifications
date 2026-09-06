@@ -388,18 +388,6 @@ export function createStateController({ controller, store, sessions }) {
     listeners.forEach((listener) => { try { listener(); } catch {} });
   };
 
-  const refreshGreen = () => {
-    let next = false;
-    try {
-      const byId = sessions.list.getSnapshot().byId || {};
-      for (const id of Object.keys(byId)) {
-        const row = byId[id];
-        if (row && row.completed === true && row.origin !== "subagent") { next = true; break; }
-      }
-    } catch {}
-    if (next !== green) { green = next; apply(); }
-  };
-
   const refreshPlanReview = () => {
     let next = false;
     try {
@@ -409,9 +397,9 @@ export function createStateController({ controller, store, sessions }) {
     if (next !== planReviewPending) { planReviewPending = next; apply(); }
   };
 
-  const reportViewed = (sessionId) => {
+  const reportViewed = (sessionId, pendingSafe) => {
     if (typeof sessionId !== "string" || sessionId === "") return;
-    const body = JSON.stringify({ sessionId });
+    const body = JSON.stringify(pendingSafe === true ? { sessionId, pendingSafe: true } : { sessionId });
     fetch(VIEWED_PATH, {
       method: "POST",
       credentials: "same-origin",
@@ -427,10 +415,23 @@ export function createStateController({ controller, store, sessions }) {
     lastCurrentId = current;
   };
 
+  // 当前会话是否处于活跃状态（任务运行中，或正在等待用户回答/审批/plan-review）。
+  // 切回页面时若会话仍活跃，点开即清除语义不应生效：否则任务完成或提问挂起后
+  // 图标永远不会变色（viewed 会压制之后才发生的 green/pending 状态）。
+  const currentSessionActive = () => {
+    try {
+      const snapshot = sessions.list.getSnapshot();
+      const row = snapshot.byId?.[snapshot.current];
+      if (!row) return false;
+      return row.running === true || row.pendingInteraction !== undefined;
+    } catch { return false; }
+  };
+
   const reportCurrentViewed = () => {
+    if (currentSessionActive()) return;
     let current;
     try { current = sessions.list.getSnapshot().current; } catch { return; }
-    reportViewed(current);
+    reportViewed(current, true);
   };
 
   return {
@@ -439,22 +440,25 @@ export function createStateController({ controller, store, sessions }) {
         const payload = JSON.parse(message.data);
         const nextYellow = payload?.level === "yellow";
         const nextRed = payload?.level === "red";
-        if (nextYellow !== yellow || nextRed !== red) {
+        const nextGreen = payload?.level === "green";
+        if (nextYellow !== yellow || nextRed !== red || nextGreen !== green) {
           yellow = nextYellow;
           red = nextRed;
+          green = nextGreen;
           apply();
         }
       } catch {}
     },
     start() {
       const disposers = [store.subscribe(() => apply())];
-      try { disposers.push(sessions.list.subscribe(() => { refreshGreen(); refreshPlanReview(); watchCurrent(); })); } catch {}
-      refreshGreen();
+      try { disposers.push(sessions.list.subscribe(() => { refreshPlanReview(); watchCurrent(); })); } catch {}
       refreshPlanReview();
       watchCurrent();
       // 页面重新获得焦点/回到可见状态时（从其他标签页或应用切回 DSH），
-      // 当前会话视为已打开：上报 viewed 清除其颜色贡献，
-      // 避免"任务完成后切回页面图标仍残留颜色，需切换会话才能恢复"的问题。
+      // 若当前会话已空闲（任务结束且无待回答），上报 viewed 清除其颜色贡献，
+      // 避免"任务完成后切回页面图标仍残留颜色，需切换会话才能恢复"的问题；
+      // 若会话仍活跃（运行中/待回答），则不清除，保证之后发生的
+      // 任务完成（绿）或提问挂起（黄）仍能正常变色。
       const onVisibility = () => { if (document.visibilityState === "visible") reportCurrentViewed(); };
       const onFocus = () => reportCurrentViewed();
       if (typeof document?.addEventListener === "function" && typeof window?.addEventListener === "function") {

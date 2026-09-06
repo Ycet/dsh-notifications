@@ -24,6 +24,9 @@ test("built client carries the favicon status indicator feature", () => {
   const bundle = readFileSync(new URL("../client.js", import.meta.url), "utf8");
   assert.match(bundle, /faviconEnabled/);
   assert.match(bundle, /dsh-notifications\/api\/viewed/);
+  assert.match(bundle, /pendingSafe/);
+  assert.match(bundle, /pendingInteraction !== void 0/);
+  assert.match(bundle, /running === !0/);
   assert.match(bundle, /dsh-notify-legend/);
   assert.match(bundle, /addEventListener\([^)]*"state"/);
   assert.match(bundle, /F5C518/);
@@ -32,6 +35,7 @@ test("built client carries the favicon status indicator feature", () => {
   assert.match(bundle, /link\[rel=.icon.\]/);
   assert.match(bundle, /__DSH_FILL__/);
   assert.match(bundle, /encodeURIComponent/);
+  assert.match(bundle, /level === "green"/);
   assert.match(bundle, /visibilitychange/);
   assert.match(bundle, /addEventListener\([^)]*"focus"/);
 });

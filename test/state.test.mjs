@@ -18,6 +18,11 @@ function questionAnswered(callId = "call-1", seq = 2) {
   return { type: "tool/result", seq, data: { callId } };
 }
 
+/** 真实 DSH 事件流中 tool/result 的 callId 位于 data.message.source.callId。 */
+function questionAnsweredRealShape(callId = "call-1", seq = 2) {
+  return { type: "tool/result", seq, data: { message: { source: { kind: "tool", callId } } } };
+}
+
 function turnStart(seq = 1) {
   return { type: "turn/start", seq, data: {} };
 }
@@ -39,6 +44,14 @@ test("question pending turns yellow and clears when answered", () => {
   tracker.apply("s1", questionAsked());
   assert.equal(tracker.aggregate(), "yellow");
   tracker.apply("s1", questionAnswered());
+  assert.equal(tracker.aggregate(), null);
+});
+
+test("question clears when answered with the real message.source.callId shape", () => {
+  const tracker = createStateTracker();
+  tracker.apply("s1", questionAsked("call-real-1", 1));
+  assert.equal(tracker.aggregate(), "yellow");
+  tracker.apply("s1", questionAnsweredRealShape("call-real-1", 2));
   assert.equal(tracker.aggregate(), null);
 });
 
@@ -139,12 +152,53 @@ test("markViewed is idempotent and applies to sessions created later", () => {
   const tracker = createStateTracker();
   assert.equal(tracker.markViewed("s1"), true);
   assert.equal(tracker.markViewed("s1"), false);
+  // 打开会话后新到达的待审批仍计入黄色（pending 优先于 viewed）
   tracker.apply("s1", approvalAsked());
-  assert.equal(tracker.aggregate(), null);
+  assert.equal(tracker.aggregate(), "yellow");
   // turn/start 重置 viewed 后该会话重新计入
   tracker.apply("s1", turnStart(2));
   tracker.apply("s1", approvalAsked("3", 3));
   assert.equal(tracker.aggregate(), "yellow");
+});
+
+test("opening a conversation clears its own pending asks", () => {
+  const tracker = createStateTracker();
+  tracker.apply("s1", questionAsked("call-1", 1));
+  assert.equal(tracker.aggregate(), "yellow");
+  // 明确打开会话（无 pendingSafe）→ 该会话已有待回答视为已见，黄色清除
+  assert.equal(tracker.markViewed("s1"), true);
+  assert.equal(tracker.aggregate(), null);
+  assert.equal(tracker.snapshot().find((item) => item.sessionId === "s1").pending.length, 0);
+  // 打开后再来的新提问 → 黄色重新计入
+  tracker.apply("s1", questionAsked("call-2", 3));
+  assert.equal(tracker.aggregate(), "yellow");
+});
+
+test("pendingSafe markViewed keeps pending yellow while idle mark clears it", () => {
+  const tracker = createStateTracker();
+  tracker.apply("s1", questionAsked("call-1", 1));
+  assert.equal(tracker.aggregate(), "yellow");
+  // 待回答未解决时切回页面（pendingSafe）→ 不从黄色清除
+  assert.equal(tracker.markViewed("s1", { pendingSafe: true }), false);
+  assert.equal(tracker.aggregate(), "yellow");
+  // 明确打开会话（默认）即使有 pending 也清除
+  assert.equal(tracker.markViewed("s1"), true);
+  assert.equal(tracker.aggregate(), null);
+  // 下一轮重新计入
+  tracker.apply("s1", turnStart(3));
+  assert.equal(tracker.aggregate(), null);
+  tracker.apply("s1", approvalAsked("4", 4));
+  assert.equal(tracker.aggregate(), "yellow");
+});
+
+test("pendingSafe markViewed clears green after the task finished", () => {
+  const tracker = createStateTracker();
+  tracker.apply("s1", turnStart(1));
+  tracker.apply("s1", turnEnd("completed", 2));
+  assert.equal(tracker.aggregate(), "green");
+  // 完成后切回页面（pendingSafe）→ 绿色清除
+  assert.equal(tracker.markViewed("s1", { pendingSafe: true }), true);
+  assert.equal(tracker.aggregate(), null);
 });
 
 test("dispose removes session state", () => {

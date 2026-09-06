@@ -390,20 +390,6 @@ function createStateController({ controller, store, sessions }) {
       } catch {
       }
     });
-  }, refreshGreen = () => {
-    let next = !1;
-    try {
-      let byId = sessions.list.getSnapshot().byId || {};
-      for (let id of Object.keys(byId)) {
-        let row = byId[id];
-        if (row && row.completed === !0 && row.origin !== "subagent") {
-          next = !0;
-          break;
-        }
-      }
-    } catch {
-    }
-    next !== green && (green = next, apply2());
   }, refreshPlanReview = () => {
     let next = !1;
     try {
@@ -412,9 +398,9 @@ function createStateController({ controller, store, sessions }) {
     } catch {
     }
     next !== planReviewPending && (planReviewPending = next, apply2());
-  }, reportViewed = (sessionId) => {
+  }, reportViewed = (sessionId, pendingSafe) => {
     if (typeof sessionId != "string" || sessionId === "") return;
-    let body = JSON.stringify({ sessionId });
+    let body = JSON.stringify(pendingSafe === !0 ? { sessionId, pendingSafe: !0 } : { sessionId });
     fetch(VIEWED_PATH, {
       method: "POST",
       credentials: "same-origin",
@@ -430,20 +416,28 @@ function createStateController({ controller, store, sessions }) {
       return;
     }
     typeof current == "string" && current !== "" && current !== lastCurrentId && reportViewed(current), lastCurrentId = current;
+  }, currentSessionActive = () => {
+    try {
+      let snapshot = sessions.list.getSnapshot(), row = snapshot.byId?.[snapshot.current];
+      return row ? row.running === !0 || row.pendingInteraction !== void 0 : !1;
+    } catch {
+      return !1;
+    }
   }, reportCurrentViewed = () => {
+    if (currentSessionActive()) return;
     let current;
     try {
       current = sessions.list.getSnapshot().current;
     } catch {
       return;
     }
-    reportViewed(current);
+    reportViewed(current, !0);
   };
   return {
     handleState(message) {
       try {
-        let payload = JSON.parse(message.data), nextYellow = payload?.level === "yellow", nextRed = payload?.level === "red";
-        (nextYellow !== yellow || nextRed !== red) && (yellow = nextYellow, red = nextRed, apply2());
+        let payload = JSON.parse(message.data), nextYellow = payload?.level === "yellow", nextRed = payload?.level === "red", nextGreen = payload?.level === "green";
+        (nextYellow !== yellow || nextRed !== red || nextGreen !== green) && (yellow = nextYellow, red = nextRed, green = nextGreen, apply2());
       } catch {
       }
     },
@@ -451,11 +445,11 @@ function createStateController({ controller, store, sessions }) {
       let disposers = [store.subscribe(() => apply2())];
       try {
         disposers.push(sessions.list.subscribe(() => {
-          refreshGreen(), refreshPlanReview(), watchCurrent();
+          refreshPlanReview(), watchCurrent();
         }));
       } catch {
       }
-      refreshGreen(), refreshPlanReview(), watchCurrent();
+      refreshPlanReview(), watchCurrent();
       let onVisibility = () => {
         document.visibilityState === "visible" && reportCurrentViewed();
       }, onFocus = () => reportCurrentViewed();
