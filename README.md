@@ -72,10 +72,10 @@ DeepSeek Harness（DSH）Web 消息通知插件：会话待审批、发起结构
 
 ```sh
 # 方式一：从 GitHub 安装
-dsh plugin --profile web add github:Ycet/dsh-notifications
+dsh plugin --profile <profile> add github:Ycet/dsh-notifications
 
 # 方式二：从本地源码安装（开发）
-dsh plugin --profile web add dsh-notifications@file:<absolute-path-to-plugin>
+dsh plugin --profile <profile> add dsh-notifications@file:<absolute-path-to-plugin>
 ```
 
 包声明了 `dsh.bundle` 补丁层，`dsh plugin` 会自动把加载项合入 profile 的 bundle 层，无需手动编辑 `cordis.patch.yml`。
@@ -86,7 +86,7 @@ dsh plugin --profile web add dsh-notifications@file:<absolute-path-to-plugin>
 卸载：
 
 ```sh
-dsh plugin --profile web remove dsh-notifications
+dsh plugin --profile <profile> remove dsh-notifications
 ```
 
 ### 启动

@@ -25,7 +25,10 @@ test("built client carries the favicon status indicator feature", () => {
   assert.match(bundle, /faviconEnabled/);
   assert.match(bundle, /dsh-notifications\/api\/viewed/);
   assert.match(bundle, /pendingSafe/);
-  assert.match(bundle, /pendingInteraction !== void 0/);
+  assert.match(bundle, /useSessionPendingInteraction/);
+  assert.match(bundle, /dsh-notifications-pending-interactions/);
+  assert.match(bundle, /setPendingInteractions/);
+  assert.doesNotMatch(bundle, /row\.pendingInteraction/);
   assert.match(bundle, /running === !0/);
   assert.match(bundle, /dsh-notify-legend/);
   assert.match(bundle, /addEventListener\([^)]*"state"/);

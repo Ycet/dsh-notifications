@@ -66,11 +66,11 @@ function eventEnabled(config, eventType) {
 function shouldSurfaceEvent({ config, event, permission, visibilityState, documentHasFocus = !0, currentSessionId }) {
   return !isNormalizedNotificationEvent(event) || permission !== "granted" || !eventEnabled(config, event.type) ? !1 : visibilityState !== "visible" || documentHasFocus !== !0 || currentSessionId !== event.sessionId;
 }
-function detectPendingPlanReview(byId, currentSessionId) {
+function detectPendingPlanReview(pendingBySession, byId, currentSessionId) {
   if (!byId || typeof byId != "object") return !1;
   for (let id of Object.keys(byId)) {
-    let row = byId[id];
-    if (row && row.pendingInteraction === "plan-review" && row.origin !== "subagent" && id !== currentSessionId) return !0;
+    let row = byId[id], pending = typeof pendingBySession?.get == "function" ? pendingBySession.get(id) : pendingBySession?.[id];
+    if (row && pending?.kind === "plan-review" && row.origin !== "subagent" && id !== currentSessionId) return !0;
   }
   return !1;
 }
@@ -383,7 +383,7 @@ function createFaviconController() {
   };
 }
 function createStateController({ controller, store, sessions }) {
-  let yellow = !1, red = !1, green = !1, planReviewPending = !1, lastCurrentId, listeners = /* @__PURE__ */ new Set(), currentLevel = () => store.getSnapshot().value.faviconEnabled !== !0 ? null : yellow || planReviewPending ? "yellow" : red ? "red" : green ? "green" : null, apply2 = () => {
+  let yellow = !1, red = !1, green = !1, planReviewPending = !1, pendingInteractions = /* @__PURE__ */ new Map(), lastCurrentId, listeners = /* @__PURE__ */ new Set(), currentLevel = () => store.getSnapshot().value.faviconEnabled !== !0 ? null : yellow || planReviewPending ? "yellow" : red ? "red" : green ? "green" : null, apply2 = () => {
     controller.apply(currentLevel()), listeners.forEach((listener) => {
       try {
         listener();
@@ -394,7 +394,7 @@ function createStateController({ controller, store, sessions }) {
     let next = !1;
     try {
       let snapshot = sessions.list.getSnapshot();
-      next = detectPendingPlanReview(snapshot.byId || {}, snapshot.current);
+      next = detectPendingPlanReview(pendingInteractions, snapshot.byId || {}, snapshot.current);
     } catch {
     }
     next !== planReviewPending && (planReviewPending = next, apply2());
@@ -419,7 +419,9 @@ function createStateController({ controller, store, sessions }) {
   }, currentSessionActive = () => {
     try {
       let snapshot = sessions.list.getSnapshot(), row = snapshot.byId?.[snapshot.current];
-      return row ? row.running === !0 || row.pendingInteraction !== void 0 : !1;
+      if (!row) return !1;
+      let pending = typeof pendingInteractions?.get == "function" ? pendingInteractions.get(snapshot.current) : pendingInteractions?.[snapshot.current];
+      return row.running === !0 || pending !== void 0;
     } catch {
       return !1;
     }
@@ -434,6 +436,9 @@ function createStateController({ controller, store, sessions }) {
     reportViewed(current, !0);
   };
   return {
+    setPendingInteractions(snapshot) {
+      pendingInteractions = snapshot && (typeof snapshot.get == "function" || typeof snapshot == "object") ? snapshot : /* @__PURE__ */ new Map(), refreshPlanReview();
+    },
     handleState(message) {
       try {
         let payload = JSON.parse(message.data), nextYellow = payload?.level === "yellow", nextRed = payload?.level === "red", nextGreen = payload?.level === "green";
@@ -469,6 +474,15 @@ function createStateController({ controller, store, sessions }) {
       return listeners.add(listener), () => listeners.delete(listener);
     }
   };
+}
+function PendingInteractionBridge({ useSessionPendingInteraction, stateController }) {
+  return typeof useSessionPendingInteraction != "function" ? null : import_react.default.createElement(PendingInteractionBridgeActive, { useSessionPendingInteraction, stateController });
+}
+function PendingInteractionBridgeActive({ useSessionPendingInteraction, stateController }) {
+  let pendingInteractions = useSessionPendingInteraction((snapshot) => snapshot);
+  return import_react.default.useEffect(() => {
+    stateController.setPendingInteractions(pendingInteractions);
+  }, [stateController, pendingInteractions]), null;
 }
 function createNotificationController(ctx, store, t, options = {}) {
   let seen = /* @__PURE__ */ new Set(), leader = createLeaderElector(), source, onState = typeof options.onState == "function" ? options.onState : null, onDispose = typeof options.onDispose == "function" ? options.onDispose : null, remember = (id) => {
@@ -682,7 +696,12 @@ function apply(ctx) {
   ctx.effect(() => {
     let tag = document.createElement("style");
     return tag.dataset.plugin = "dsh-notifications", tag.textContent = CSS, document.head.appendChild(tag), () => tag.remove();
-  }, "dsh-notifications: styles"), ctx.effect(() => controller.start(), "dsh-notifications: event stream"), ctx.effect(() => stateController.start(), "dsh-notifications: favicon state"), ctx.slots.inject("settings.plugin.item", () => ctx.slots.register({
+  }, "dsh-notifications: styles"), ctx.effect(() => controller.start(), "dsh-notifications: event stream"), ctx.effect(() => stateController.start(), "dsh-notifications: favicon state"), ctx.slots.inject("shell.overlay", () => ctx.slots.register({
+    name: "shell.overlay",
+    id: "dsh-notifications-pending-interactions",
+    order: -100,
+    inject: () => ({ stateController })
+  }, PendingInteractionBridge)), ctx.slots.inject("settings.plugin.item", () => ctx.slots.register({
     name: "settings.plugin.item",
     key: "dsh-notifications",
     id: "notifications",

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-test("built client registers the notification card with a keyed settings slot", (t) => {
+test("built client registers the notification card and pending bridge in separate slots", (t) => {
   const bundle = readFileSync(new URL("../client.js", import.meta.url), "utf8");
   const cleanups = [];
   const registrations = [];
@@ -72,11 +72,11 @@ test("built client registers the notification card with a keyed settings slot", 
     },
     slots: {
       inject(name, factory) {
-        assert.equal(name, "settings.plugin.item");
+        assert.ok(["shell.overlay", "settings.plugin.item"].includes(name));
         return factory();
       },
       register(options) {
-        if (options.key === undefined) {
+        if (options.name === "settings.plugin.item" && options.key === undefined) {
           throw new Error(`keyed slot ${JSON.stringify(options.name)} requires options.key`);
         }
         registrations.push(options);
@@ -86,7 +86,9 @@ test("built client registers the notification card with a keyed settings slot", 
   };
 
   client.apply(ctx);
-  assert.equal(registrations.length, 1);
-  assert.equal(registrations[0].key, "dsh-notifications");
-  assert.equal(registrations[0].id, "notifications");
+  const settings = registrations.find((registration) => registration.name === "settings.plugin.item");
+  const bridge = registrations.find((registration) => registration.name === "shell.overlay");
+  assert.equal(settings?.key, "dsh-notifications");
+  assert.equal(settings?.id, "notifications");
+  assert.equal(bridge?.id, "dsh-notifications-pending-interactions");
 });

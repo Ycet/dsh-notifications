@@ -375,6 +375,7 @@ export function createStateController({ controller, store, sessions }) {
   let red = false;
   let green = false;
   let planReviewPending = false;
+  let pendingInteractions = new Map();
   let lastCurrentId;
   const listeners = new Set();
 
@@ -392,7 +393,7 @@ export function createStateController({ controller, store, sessions }) {
     let next = false;
     try {
       const snapshot = sessions.list.getSnapshot();
-      next = detectPendingPlanReview(snapshot.byId || {}, snapshot.current);
+      next = detectPendingPlanReview(pendingInteractions, snapshot.byId || {}, snapshot.current);
     } catch {}
     if (next !== planReviewPending) { planReviewPending = next; apply(); }
   };
@@ -423,7 +424,10 @@ export function createStateController({ controller, store, sessions }) {
       const snapshot = sessions.list.getSnapshot();
       const row = snapshot.byId?.[snapshot.current];
       if (!row) return false;
-      return row.running === true || row.pendingInteraction !== undefined;
+      const pending = typeof pendingInteractions?.get === "function"
+        ? pendingInteractions.get(snapshot.current)
+        : pendingInteractions?.[snapshot.current];
+      return row.running === true || pending !== undefined;
     } catch { return false; }
   };
 
@@ -435,6 +439,12 @@ export function createStateController({ controller, store, sessions }) {
   };
 
   return {
+    setPendingInteractions(snapshot) {
+      pendingInteractions = snapshot && (typeof snapshot.get === "function" || typeof snapshot === "object")
+        ? snapshot
+        : new Map();
+      refreshPlanReview();
+    },
     handleState(message) {
       try {
         const payload = JSON.parse(message.data);
@@ -474,6 +484,24 @@ export function createStateController({ controller, store, sessions }) {
     getLevel() { return currentLevel(); },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); }
   };
+}
+
+/**
+ * Receives rc.1's root pending-interaction Hook through shell.overlay. The
+ * bridge renders nothing, but remains mounted even while Settings is closed,
+ * so a background plan-review can still drive the favicon.
+ */
+function PendingInteractionBridge({ useSessionPendingInteraction, stateController }) {
+  if (typeof useSessionPendingInteraction !== "function") return null;
+  return React.createElement(PendingInteractionBridgeActive, { useSessionPendingInteraction, stateController });
+}
+
+function PendingInteractionBridgeActive({ useSessionPendingInteraction, stateController }) {
+  const pendingInteractions = useSessionPendingInteraction((snapshot) => snapshot);
+  React.useEffect(() => {
+    stateController.setPendingInteractions(pendingInteractions);
+  }, [stateController, pendingInteractions]);
+  return null;
 }
 
 export function createNotificationController(ctx, store, t, options = {}) {
@@ -698,6 +726,12 @@ export function apply(ctx) {
   }, "dsh-notifications: styles");
   ctx.effect(() => controller.start(), "dsh-notifications: event stream");
   ctx.effect(() => stateController.start(), "dsh-notifications: favicon state");
+  ctx.slots.inject("shell.overlay", () => ctx.slots.register({
+    name: "shell.overlay",
+    id: "dsh-notifications-pending-interactions",
+    order: -100,
+    inject: () => ({ stateController })
+  }, PendingInteractionBridge));
   ctx.slots.inject("settings.plugin.item", () => ctx.slots.register({
     name: "settings.plugin.item",
     key: "dsh-notifications",
