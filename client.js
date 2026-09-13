@@ -27,7 +27,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 )), __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: !0 }), mod);
 
-// src/client.js
+// dsh-notifications/src/client.js
 var client_exports = {};
 __export(client_exports, {
   apply: () => apply,
@@ -40,7 +40,7 @@ __export(client_exports, {
 module.exports = __toCommonJS(client_exports);
 var import_react = __toESM(require("react"), 1);
 
-// lib/classifier.js
+// dsh-notifications/lib/classifier.js
 var NOTIFICATION_EVENT_TYPES = Object.freeze([
   "approval_pending",
   "question_pending",
@@ -48,7 +48,7 @@ var NOTIFICATION_EVENT_TYPES = Object.freeze([
   "task_failed"
 ]);
 
-// lib/client-policy.js
+// dsh-notifications/lib/client-policy.js
 var TYPE_TO_SETTING = Object.freeze({
   approval_pending: "approvalPendingEnabled",
   question_pending: "questionPendingEnabled",
@@ -75,7 +75,7 @@ function detectPendingPlanReview(pendingBySession, byId, currentSessionId) {
   return !1;
 }
 
-// src/client.js
+// dsh-notifications/src/client.js
 var NS = "dshNotifications", CONFIG_PATH = "/dsh-notifications/api/config", EVENTS_PATH = "/dsh-notifications/api/events", VIEWED_PATH = "/dsh-notifications/api/viewed", DEFAULTS = Object.freeze({
   enabled: !0,
   approvalPendingEnabled: !0,
@@ -341,7 +341,7 @@ function notificationTitle(t, type) {
   }[type]);
 }
 function createFaviconController() {
-  let link = null, originalHref = "", template = null, warned = !1, lastError = null, findLink = () => (link && link.isConnected || (link = document.querySelector('link[rel="icon"]')), link), loadTemplate = async () => {
+  let link = null, originalHref = "", template = null, warned = !1, lastError = null, revision = 0, findLink = () => (link && link.isConnected || (link = document.querySelector('link[rel="icon"]')), link), loadTemplate = async () => {
     let current = findLink();
     if (!current || typeof current.href != "string" || current.href === "") return null;
     let href = current.href.startsWith("data:") && originalHref !== "" ? originalHref : current.href;
@@ -356,6 +356,7 @@ function createFaviconController() {
   };
   return {
     async apply(level) {
+      let request = ++revision;
       if (lastError = null, level !== "yellow" && level !== "red" && level !== "green") {
         let current = findLink();
         current && originalHref !== "" && current.href !== originalHref && (current.href = originalHref);
@@ -363,6 +364,7 @@ function createFaviconController() {
       }
       try {
         let source = await loadTemplate();
+        if (request !== revision) return;
         if (source === null) {
           lastError = "unavailable", warned || (warned = !0, console.warn("[dsh-notifications] favicon is unavailable, keeping the default icon"));
           return;
@@ -374,6 +376,7 @@ function createFaviconController() {
         let svg = source.replaceAll("__DSH_FILL__", `#${FAVICON_COLORS[level]}`), url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, current = findLink();
         current && current.href !== url && (current.href = url), warned = !1;
       } catch (error) {
+        if (request !== revision) return;
         lastError = String(error), warned || (warned = !0, console.warn("[dsh-notifications] favicon update failed", error));
       }
     },
@@ -390,17 +393,17 @@ function createStateController({ controller, store, sessions }) {
       } catch {
       }
     });
-  }, refreshPlanReview = () => {
+  }, isForeground = () => document.visibilityState === "visible" && (typeof document.hasFocus != "function" || document.hasFocus()), refreshPlanReview = () => {
     let next = !1;
     try {
       let snapshot = sessions.list.getSnapshot();
-      next = detectPendingPlanReview(pendingInteractions, snapshot.byId || {}, snapshot.current);
+      next = detectPendingPlanReview(pendingInteractions, snapshot.byId || {}, isForeground() ? snapshot.current : void 0);
     } catch {
     }
     next !== planReviewPending && (planReviewPending = next, apply2());
-  }, reportViewed = (sessionId, pendingSafe) => {
+  }, reportViewed = (sessionId) => {
     if (typeof sessionId != "string" || sessionId === "") return;
-    let body = JSON.stringify(pendingSafe === !0 ? { sessionId, pendingSafe: !0 } : { sessionId });
+    let body = JSON.stringify({ sessionId });
     fetch(VIEWED_PATH, {
       method: "POST",
       credentials: "same-origin",
@@ -409,6 +412,7 @@ function createStateController({ controller, store, sessions }) {
     }).catch(() => {
     });
   }, watchCurrent = () => {
+    if (!isForeground()) return;
     let current;
     try {
       current = sessions.list.getSnapshot().current;
@@ -416,24 +420,15 @@ function createStateController({ controller, store, sessions }) {
       return;
     }
     typeof current == "string" && current !== "" && current !== lastCurrentId && reportViewed(current), lastCurrentId = current;
-  }, currentSessionActive = () => {
-    try {
-      let snapshot = sessions.list.getSnapshot(), row = snapshot.byId?.[snapshot.current];
-      if (!row) return !1;
-      let pending = typeof pendingInteractions?.get == "function" ? pendingInteractions.get(snapshot.current) : pendingInteractions?.[snapshot.current];
-      return row.running === !0 || pending !== void 0;
-    } catch {
-      return !1;
-    }
   }, reportCurrentViewed = () => {
-    if (currentSessionActive()) return;
+    if (!isForeground()) return;
     let current;
     try {
       current = sessions.list.getSnapshot().current;
     } catch {
       return;
     }
-    reportViewed(current, !0);
+    reportViewed(current);
   };
   return {
     setPendingInteractions(snapshot) {
@@ -442,7 +437,7 @@ function createStateController({ controller, store, sessions }) {
     handleState(message) {
       try {
         let payload = JSON.parse(message.data), nextYellow = payload?.level === "yellow", nextRed = payload?.level === "red", nextGreen = payload?.level === "green";
-        (nextYellow !== yellow || nextRed !== red || nextGreen !== green) && (yellow = nextYellow, red = nextRed, green = nextGreen, apply2());
+        (nextYellow !== yellow || nextRed !== red || nextGreen !== green) && (yellow = nextYellow, red = nextRed, green = nextGreen, apply2(), payload.level != null && reportCurrentViewed());
       } catch {
       }
     },
@@ -456,10 +451,12 @@ function createStateController({ controller, store, sessions }) {
       }
       refreshPlanReview(), watchCurrent();
       let onVisibility = () => {
-        document.visibilityState === "visible" && reportCurrentViewed();
-      }, onFocus = () => reportCurrentViewed();
-      return typeof document?.addEventListener == "function" && typeof window?.addEventListener == "function" && (document.addEventListener("visibilitychange", onVisibility), window.addEventListener("focus", onFocus), disposers.push(() => {
-        document.removeEventListener("visibilitychange", onVisibility), window.removeEventListener("focus", onFocus);
+        refreshPlanReview(), reportCurrentViewed(), apply2();
+      }, onFocus = onVisibility, onBlur = () => {
+        refreshPlanReview(), apply2();
+      };
+      return typeof document?.addEventListener == "function" && typeof window?.addEventListener == "function" && (document.addEventListener("visibilitychange", onVisibility), window.addEventListener("focus", onFocus), window.addEventListener("blur", onBlur), disposers.push(() => {
+        document.removeEventListener("visibilitychange", onVisibility), window.removeEventListener("focus", onFocus), window.removeEventListener("blur", onBlur);
       })), () => disposers.forEach((dispose) => {
         try {
           dispose();

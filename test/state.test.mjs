@@ -260,3 +260,20 @@ test("tool/result nested message.callId clears the question pending", () => {
   const entry = tracker.snapshot().find((item) => item.sessionId === "s1");
   assert.equal(entry.pending.length, 0);
 });
+test("each later reminder in the same turn can be viewed independently", () => {
+  const tracker = createStateTracker();
+  tracker.apply("s1", turnStart(1));
+  tracker.markViewed("s1");
+  tracker.apply("s1", questionAsked("first", 2));
+  assert.equal(tracker.aggregate(), "yellow");
+  assert.equal(tracker.markViewed("s1"), true);
+  assert.equal(tracker.aggregate(), null);
+  tracker.apply("s1", questionAsked("second", 3));
+  assert.equal(tracker.aggregate(), "yellow");
+  tracker.markViewed("s1");
+  tracker.apply("s1", turnEnd("completed", 4));
+  assert.equal(tracker.aggregate(), "green");
+  tracker.markViewed("s1");
+  tracker.apply("s1", turnEnd("completed", 4));
+  assert.equal(tracker.aggregate(), null, "replayed events remain acknowledged");
+});

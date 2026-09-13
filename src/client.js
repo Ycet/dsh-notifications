@@ -306,6 +306,7 @@ export function createFaviconController() {
   let template = null;
   let warned = false;
   let lastError = null;
+  let revision = 0;
 
   const findLink = () => {
     if (link && link.isConnected) return link;
@@ -332,6 +333,7 @@ export function createFaviconController() {
 
   return {
     async apply(level) {
+      const request = ++revision;
       lastError = null;
       if (level !== "yellow" && level !== "red" && level !== "green") {
         const current = findLink();
@@ -340,6 +342,7 @@ export function createFaviconController() {
       }
       try {
         const source = await loadTemplate();
+        if (request !== revision) return;
         if (source === null) {
           lastError = "unavailable";
           if (!warned) { warned = true; console.warn("[dsh-notifications] favicon is unavailable, keeping the default icon"); }
@@ -356,6 +359,7 @@ export function createFaviconController() {
         if (current && current.href !== url) current.href = url;
         warned = false;
       } catch (error) {
+        if (request !== revision) return;
         lastError = String(error);
         if (!warned) { warned = true; console.warn("[dsh-notifications] favicon update failed", error); }
       }
@@ -365,10 +369,10 @@ export function createFaviconController() {
 }
 
 /**
- * Combines host-pushed pending/failed levels (SSE "state" events) with the
- * client-side "completed and unviewed" sessions from the live session list.
- * Reports opened sessions (current changes) to the host so their color
- * contribution clears. Priority yellow > red > green is applied last.
+ * Combines host-pushed levels with client-side plan-review pending state.
+ * A selected session is viewed only while the page is visible and focused.
+ * Opening it or returning to the page acknowledges its existing host state.
+ * Priority yellow > red > green is applied last.
  */
 export function createStateController({ controller, store, sessions }) {
   let yellow = false;
@@ -389,18 +393,21 @@ export function createStateController({ controller, store, sessions }) {
     listeners.forEach((listener) => { try { listener(); } catch {} });
   };
 
+  const isForeground = () => document.visibilityState === "visible"
+    && (typeof document.hasFocus !== "function" || document.hasFocus());
+
   const refreshPlanReview = () => {
     let next = false;
     try {
       const snapshot = sessions.list.getSnapshot();
-      next = detectPendingPlanReview(pendingInteractions, snapshot.byId || {}, snapshot.current);
+      next = detectPendingPlanReview(pendingInteractions, snapshot.byId || {}, isForeground() ? snapshot.current : undefined);
     } catch {}
     if (next !== planReviewPending) { planReviewPending = next; apply(); }
   };
 
-  const reportViewed = (sessionId, pendingSafe) => {
+  const reportViewed = (sessionId) => {
     if (typeof sessionId !== "string" || sessionId === "") return;
-    const body = JSON.stringify(pendingSafe === true ? { sessionId, pendingSafe: true } : { sessionId });
+    const body = JSON.stringify({ sessionId });
     fetch(VIEWED_PATH, {
       method: "POST",
       credentials: "same-origin",
@@ -410,32 +417,20 @@ export function createStateController({ controller, store, sessions }) {
   };
 
   const watchCurrent = () => {
+    if (!isForeground()) return;
     let current;
     try { current = sessions.list.getSnapshot().current; } catch { return; }
     if (typeof current === "string" && current !== "" && current !== lastCurrentId) reportViewed(current);
     lastCurrentId = current;
   };
 
-  // 当前会话是否处于活跃状态（任务运行中，或正在等待用户回答/审批/plan-review）。
-  // 切回页面时若会话仍活跃，点开即清除语义不应生效：否则任务完成或提问挂起后
-  // 图标永远不会变色（viewed 会压制之后才发生的 green/pending 状态）。
-  const currentSessionActive = () => {
-    try {
-      const snapshot = sessions.list.getSnapshot();
-      const row = snapshot.byId?.[snapshot.current];
-      if (!row) return false;
-      const pending = typeof pendingInteractions?.get === "function"
-        ? pendingInteractions.get(snapshot.current)
-        : pendingInteractions?.[snapshot.current];
-      return row.running === true || pending !== undefined;
-    } catch { return false; }
-  };
-
+  // Returning to the page is the same acknowledgement as opening a session.
+  // Do not rely on running/pending rows: their transport may lag behind SSE.
   const reportCurrentViewed = () => {
-    if (currentSessionActive()) return;
+    if (!isForeground()) return;
     let current;
     try { current = sessions.list.getSnapshot().current; } catch { return; }
-    reportViewed(current, true);
+    reportViewed(current);
   };
 
   return {
@@ -456,6 +451,8 @@ export function createStateController({ controller, store, sessions }) {
           red = nextRed;
           green = nextGreen;
           apply();
+          // State can arrive after the focus event when a background tab resumes.
+          if (payload.level != null) reportCurrentViewed();
         }
       } catch {}
     },
@@ -464,19 +461,17 @@ export function createStateController({ controller, store, sessions }) {
       try { disposers.push(sessions.list.subscribe(() => { refreshPlanReview(); watchCurrent(); })); } catch {}
       refreshPlanReview();
       watchCurrent();
-      // 页面重新获得焦点/回到可见状态时（从其他标签页或应用切回 DSH），
-      // 若当前会话已空闲（任务结束且无待回答），上报 viewed 清除其颜色贡献，
-      // 避免"任务完成后切回页面图标仍残留颜色，需切换会话才能恢复"的问题；
-      // 若会话仍活跃（运行中/待回答），则不清除，保证之后发生的
-      // 任务完成（绿）或提问挂起（黄）仍能正常变色。
-      const onVisibility = () => { if (document.visibilityState === "visible") reportCurrentViewed(); };
-      const onFocus = () => reportCurrentViewed();
+      const onVisibility = () => { refreshPlanReview(); reportCurrentViewed(); apply(); };
+      const onFocus = onVisibility;
+      const onBlur = () => { refreshPlanReview(); apply(); };
       if (typeof document?.addEventListener === "function" && typeof window?.addEventListener === "function") {
         document.addEventListener("visibilitychange", onVisibility);
         window.addEventListener("focus", onFocus);
+        window.addEventListener("blur", onBlur);
         disposers.push(() => {
           document.removeEventListener("visibilitychange", onVisibility);
           window.removeEventListener("focus", onFocus);
+          window.removeEventListener("blur", onBlur);
         });
       }
       return () => disposers.forEach((dispose) => { try { dispose(); } catch {} });
