@@ -1,231 +1,137 @@
 # dsh-notifications
 
+在 DeepSeek Harness 桌面端和 Web 中提醒待审批、结构化提问及任务结果，点击通知打开对应会话。
+
 [![简体中文](https://img.shields.io/badge/简体中文-red?style=for-the-badge)](README.md)
 [![English](https://img.shields.io/badge/English-blue?style=for-the-badge)](README_en.md)
 
-<div align="center">
-
-DeepSeek Harness（DSH）Web 消息通知插件：会话待审批、发起结构化提问、成功完成或失败时，通过浏览器通知提醒用户，点击通知即可打开对应会话；同时支持在标签页标题的鲸鱼图标上以颜色直观展示各会话状态。
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg?style=for-the-badge)](package.json)
-[![DSH](https://img.shields.io/badge/DSH-0.1.0--rc.6%2B-purple.svg?style=for-the-badge)](https://github.com/deepseek-ai/deepseek-harness)
-
-</div>
-
----
+[![Version](https://img.shields.io/badge/version-0.3.1-blue.svg?style=for-the-badge)](package.json)
 
 ## 📑 目录
 
-- [📸 界面预览](#-界面预览)
-- [✨ 功能特性](#-功能特性)
-- [🚀 快速开始](#-快速开始)
-- [📖 使用说明](#-使用说明)
-- [⚙️ 配置说明](#️-配置说明)
-- [🔧 工作原理](#-工作原理)
-- [🧪 开发与测试](#-开发与测试)
-- [⚠️ 已知限制](#️-已知限制)
-- [🤝 贡献](#-贡献)
-- [📄 许可证](#-许可证)
+- [功能](#-功能)
+- [快速开始](#-快速开始)
+- [使用与配置](#-使用与配置)
+- [工作原理](#-工作原理)
+- [开发与测试](#-开发与测试)
+- [兼容性与限制](#-兼容性与限制)
+- [贡献与许可证](#-贡献与许可证)
 
----
+## ✨ 功能
 
-## 📸 界面预览
+| 功能 | 行为 |
+| --- | --- |
+| 全会话提醒 | 待审批、等待回答、任务成功和任务失败；取消或中止不提醒 |
+| 桌面与 Web | 使用 Notification API；桌面通知由操作系统显示 |
+| 前台抑制 | 当前会话同时可见且窗口有焦点时不提醒；支持新版主视图绑定 |
+| 通知去重 | 相同事件只处理一次；多个窗口通过 BroadcastChannel 或 localStorage 租约选出发送者 |
+| 点击打开会话 | 新版使用工作区导航；子代理使用官方父子地址；旧 Web 保留原接口兜底 |
+| 子代理开关 | 可关闭子代理任务结果提醒，仍保留子代理待审批和提问提醒 |
+| 独立设置 | 「设置 → 消息通知」入口及通知图标，支持连接状态、授权、测试结果、保存、恢复默认及中英文 |
+| 最小事件数据 | SSE 不包含聊天正文、问题、审批参数或工具参数 |
 
-插件配置列表（「设置 → 插件 → 插件配置」中的「消息通知」入口）：
-
-![消息通知插件配置列表](docs/images/notification-settings-ui-01.png)
-
-展开后的「消息通知」配置面板（通知开关、浏览器权限与操作按钮）：
-
-![消息通知插件展开配置](docs/images/notification-settings-ui-02.png)
-
----
-
-## ✨ 功能特性
-
-| 功能 | 说明 |
-|------|------|
-| **全会话监听** | 监听全部 DSH 会话，不限于当前打开的会话 |
-| **四类通知** | 待审批、等待回答、任务成功、任务失败 |
-| **子代理通知独立开关** | 可单独开启或关闭子代理任务成功与失败通知 |
-| **标签页图标变色** | 会话待处理、失败或完成时，标签页鲸鱼图标变黄/红/绿（优先级黄＞红＞绿），点开对应会话后恢复默认色 |
-| **图标状态独立开关** | 鲸鱼图标变色与消息通知总开关相互独立，无需浏览器通知权限 |
-| **前台抑制** | 当前会话正在前台查看时自动抑制重复提醒 |
-| **多标签页单发** | 多个 DSH 标签页同时打开时，只由一个标签页发送通知 |
-| **点击直达** | 点击通知聚焦 DSH 并打开对应会话（会话已不存在时仅聚焦页面） |
-| **独立配置模块** | 在「设置 → 插件 → 插件配置」提供独立配置模块 |
-| **隐私安全** | 通知事件不包含聊天正文、问题内容、审批参数或工具参数 |
-| **双语言界面** | 中英文界面，跟随 DSH 活动语言 |
-
----
+**v0.3.1 将配置入口迁移至「设置 → 消息通知」，原通知开关和已保存配置保留。** 鲸鱼图标变色、颜色状态显示及对应状态追踪已移除，旧配置中的 `faviconEnabled` 会被忽略。
 
 ## 🚀 快速开始
 
-### 前提条件
+源码目录先执行 `pnpm install` 和 `pnpm build`，然后使用实际源码路径替换占位符。
 
-- 已安装 DSH CLI 与 pnpm（`dsh plugin` 内部转发到 pnpm）
-- 兼容 DeepSeek Harness `0.1.0-rc.6` / `0.1.0-rc.7` 系列；Windows / macOS / Linux；Chromium 内核浏览器（Chrome、Edge、Brave 等）
-- DSH 页面必须保持打开；浏览器关闭后无法通知
+### macOS 桌面端
 
-### 安装
+完全退出 DeepSeek Harness，使用应用内附带的官方 CLI 安装：
 
 ```sh
-# 方式一：从 GitHub 安装
-dsh plugin --profile <profile> add github:Ycet/dsh-notifications
-
-# 方式二：从本地源码安装（开发）
-dsh plugin --profile <profile> add dsh-notifications@file:<absolute-path-to-plugin>
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add "dsh-notifications@link:<absolute-path-to-plugin>"
 ```
 
-包声明了 `dsh.bundle` 补丁层，`dsh plugin` 会自动把加载项合入 profile 的 bundle 层，无需手动编辑 `cordis.patch.yml`。
+重新打开应用，在设置左侧选择「消息通知」，检查权限并发送测试通知。
 
-> [!NOTE]
-> `file:` 安装是快照：更新源码后需重新执行安装命令，再重启 `dsh web` 生效（bundle 层变更不热加载）。
-
-卸载：
+### Web
 
 ```sh
-dsh plugin --profile <profile> remove dsh-notifications
+dsh plugin --profile web add "dsh-notifications@link:<absolute-path-to-plugin>"
+dsh web
 ```
 
-### 启动
-
-1. 重启网页应用：`dsh web`
-2. 打开 http://127.0.0.1:3080，进入「设置 → 插件 → 插件配置」
-3. 展开「消息通知」，点击「授权通知」并在浏览器权限提示中选择允许
-
----
-
-## 📖 使用说明
-
-1. 安装插件并重启 `dsh web`；
-2. 打开「设置 → 插件 → 插件配置」；
-3. 展开「消息通知」模块；
-4. 点击「授权通知」，在浏览器权限提示中选择允许；
-5. 点击「发送测试通知」验证浏览器设置；
-6. 按需开关各类通知及子代理任务结束通知并保存。
-
-默认只有在 DSH 标签页处于后台，或事件来自非当前会话时才通知。点击通知会聚焦 DSH 并打开对应会话；若目标会话已经不存在，则只聚焦页面。
-
-> [!WARNING]
-> 浏览器必须授予当前 DSH 地址通知权限。回环地址可使用 Web Notification API；非安全远程 HTTP 地址可能被浏览器拒绝。
-
-### 标签页鲸鱼图标状态
-
-当任意非子代理会话处于以下状态时，标签页标题中的鲸鱼图标会改变颜色，直观展示 DSH 全局状态：
-
-| 图标颜色 | 出现条件 | 恢复默认色的方式 |
-| --- | --- | --- |
-| 🟡 黄色 | 有会话等待审批 / 回答结构化提问 / plan-review 待审批 | 点开该会话，或待审批状态消失（已回答） |
-| 🔴 红色 | 有会话任务失败（非取消）且未点开 | 点开该会话，或该会话开始新一轮 |
-| 🟢 绿色 | 有会话任务完成且未点开 | 点开该会话，或该会话开始新一轮 |
-
-- 多个状态并存时按 **黄＞红＞绿** 展示（例如同时存在完成、失败、待审批会话时显示黄色）。
-- 点开会话只清除"该会话"的颜色贡献；同一颜色的**所有**会话都点开后该颜色才消失。
-- 子代理会话的任何状态都不参与变色；手动取消（abort）不算失败。
-- 快速验收：任意让一个会话等待审批 → 图标变黄；打开该会话 → 图标恢复。
+打开 DSH，在「消息通知」配置中授权通知并发送测试通知。
 
 > [!NOTE]
-> 颜色状态由 Host 内存维护：刷新页面后自动恢复当前状态；重启 `dsh web` 后状态机清零，状态随新事件重新建立。
+> `link:` 引用源码目录，源码必须保留且依赖可解析。修改 Host 或 bundle 后重启对应应用；修改客户端后重新构建并刷新。安装会自动加入 profile 的 bundle 列表。
 
----
+卸载时，使用相同 CLI 和 profile，将 `add ...` 替换为 `remove dsh-notifications`，再重启对应应用。
 
-## ⚙️ 配置说明
+## 📖 使用与配置
 
-配置存储在 DSH settings 服务的 `dsh-notifications` namespace：
+打开「设置 → 消息通知」，配置卡片默认展开。先确认提醒事件连接为「已连接」，修改开关后点击「保存」。主开关关闭时，分类开关不可操作。保存遇到其他窗口更新会提示冲突并重新读取配置。
 
-| 字段 | 默认值 | 说明 |
+| 字段 | 默认值 | 含义 |
 | --- | --- | --- |
-| `enabled` | `true` | 总开关 |
-| `approvalPendingEnabled` | `true` | 待审批通知 |
-| `questionPendingEnabled` | `true` | 结构化提问通知 |
-| `taskSucceededEnabled` | `true` | 任务成功通知 |
-| `taskFailedEnabled` | `true` | 任务失败通知 |
-| `subagentTaskEndedEnabled` | `true` | 子代理任务成功或失败通知；关闭后不影响顶层任务通知 |
-| `faviconEnabled` | `true` | 标签页鲸鱼图标状态变化总开关；与消息通知总开关相互独立 |
+| `enabled` | `true` | 消息通知总开关 |
+| `approvalPendingEnabled` | `true` | 待审批提醒 |
+| `questionPendingEnabled` | `true` | 结构化提问提醒 |
+| `taskSucceededEnabled` | `true` | 任务成功提醒 |
+| `taskFailedEnabled` | `true` | 任务失败提醒 |
+| `subagentTaskEndedEnabled` | `true` | 子代理任务成功或失败提醒 |
 
-浏览器权限不写入 DSH 配置，由浏览器按 DSH origin 独立保存。
+配置通过 DSH settings 服务持久化，按 Loader entry id 定址。通知权限由浏览器或操作系统管理，不存入插件配置。
 
----
+桌面端请在系统通知设置中允许 **DeepSeek Harness**，并检查专注模式。授权状态来自 Notification API，无法判断系统是否拦截了横幅或声音。Web 需要安全地址（HTTPS 或本机回环地址）并允许该站点通知。
+
+点击通知会聚焦 DSH 并打开目标会话；目标已删除或旧版未提供子代理导航时，仅聚焦窗口，不创建替代会话。
 
 ## 🔧 工作原理
 
 ```mermaid
 flowchart LR
-    E["DSH session/event"] --> C["Host 事件分类器"]
-    C --> S["同源 SSE 事件流"]
-    S --> F["配置与前台过滤"]
-    F --> L["多标签页负责人选举"]
-    L --> N["Web Notification API"]
-    N --> O["点击后 sessions.open"]
-    E --> T["Host 状态机<br/>（仅非子代理会话）"]
-    T --> S2["SSE state 帧<br/>（黄/红聚合）"]
-    S2 --> V["客户端聚合<br/>黄＞红＞绿"]
-    B["会话列表 completed"] --> V
-    V --> I["favicon 图标着色"]
-    U["点开会话（current 变化）"] --> P["POST /api/viewed"]
-    P --> T
+    E["全部会话的 session/event"] --> C["Host 分类与开关过滤"]
+    C --> S["同源 SSE"]
+    S --> F["权限、前台状态与去重"]
+    F --> L["发送窗口选举"]
+    L --> N["Notification API"]
+    N --> O["点击聚焦与工作区导航"]
 ```
 
-Host 订阅 DSH `session/event`，只将事件归一化为以下安全结构：
-
-```json
-{
-  "eventId": "session-id:sequence:event-type",
-  "type": "approval_pending",
-  "sessionId": "session-id",
-  "occurredAt": 1786953600000
-}
-```
-
-同源接口：
+事件包含 `eventId`、`type`、`sessionId`、`occurredAt` 和 `subagent`。新版子代理可额外携带 `address`（仅父子会话 ID 和 `mode`），身份来自官方 `subagent` 投影，不扫描私有日志。通知正文只展示会话标题。
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| `GET` | `/dsh-notifications/api/config` | 读取配置与 revision |
-| `POST` | `/dsh-notifications/api/config` | 保存或恢复默认配置 |
-| `GET` | `/dsh-notifications/api/events` | SSE 通知事件流 |
-| `POST` | `/dsh-notifications/api/viewed` | 上报已打开的会话，清除其图标颜色贡献 |
+| GET / POST | `/dsh-notifications/api/config` | 读取、保存或恢复配置及 revision |
+| GET | `/dsh-notifications/api/events` | SSE 提醒事件流 |
+| GET | `/dsh-notifications/api/debug` | 客户端连接数和缓冲事件数，不含会话内容 |
 
-SSE 仅在连接短暂中断时补发事件：Host 内存最多保存 256 条、5 分钟；首次连接和 Host 重启后不回放历史事件。
-
-图标状态机基于事件流维护每个**非子代理**会话的「待处理 / 失败 / 完成 / 已查看」状态：`approval/asked ↔ approval/decided`、提问工具 `tool/call ↔ tool/result`、`turn/start`（新一轮重置全部状态）、`turn/end`（error → 失败，completed → 完成，aborted → 中性）。客户端在页面加载或切换会话时调用 `viewed` 上报，Host 按 **黄＞红＞绿** 计算聚合 `state` 帧并随 SSE 广播；客户端再叠加会话列表中「已完成且未查看」的绿色，最终把鲸鱼 SVG 改色后写回 favicon。
-
----
+接口保留同源与可信 Host 校验。桌面端由官方应用协议代理认证，不开放额外监听端口。首次连接不回放历史；短暂断线依据 Last-Event-ID 补发，内存最多保留 256 条、5 分钟。卸载插件会关闭 SSE、释放选举定时器和移除设置入口。
 
 ## 🧪 开发与测试
 
-```bash
+```sh
 pnpm install
 pnpm build
-pnpm test
 pnpm check
+pnpm test
 ```
 
-事件分类器采用显式结构契约：审批或提问必须是对应的 pending/request 事件，结构化提问也支持 `tool/call` 中的 `request_user_input` 等明确工具名；普通 assistant 文本不会按问号识别。`turn/end` 默认为成功，明确的失败结果映射为失败，取消和中止不通知。子代理通过 DSH 官方会话元数据 `origin: "subagent"` 或正数 `delegationDepth` 识别，不通过标题或 DOM 文本推断。
+测试覆盖四类通知、去重、前台抑制、权限与开关、普通和子代理导航、保存冲突、SSE 补发及资源清理；保留旧版事件的脱敏 fixture。
 
-图标状态机（`lib/state.js`）采用相同的键控幂等与单调序列守卫设计：审批与提问按 id/callId 配对消耗，重复或乱序事件是安全空操作；「已查看」标记幂等持久，直到该会话新一轮 `turn/start` 才重置。
+使用准备好的官方 DSH 运行时执行集成测试：
 
----
+```sh
+DSH_RUNTIME_DIR="<prepared-dsh-runtime-directory>" pnpm test
+```
 
-## ⚠️ 已知限制
+该目录应包含官方 `node_modules`；未提供时仅跳过该集成测试。集成测试使用真实 Cordis、SessionStore、子代理服务与会话投影，不调用模型或外部业务工具。
 
-- DSH 尚未公开完整事件 schema。插件会在 debug 日志中仅记录未知事件的类型和字段名，便于升级适配，不记录字段值。
-- 如果目标 DSH 版本没有为某类状态提供官方事件，该类通知不会触发；插件不会通过 DOM 文案或 CSS 选择器猜测状态。
-- 鲸鱼图标变色依赖页面 favicon（`/favicon.svg`）：favicon 缺失或加载失败时图标保持默认色，不阻塞其他功能。
-- Firefox 和 Safari 未列入首版验收范围。
-- 不提供原生 Node 通知、浏览器关闭后的推送、自定义通知音或外部消息渠道。
-- 多标签页采用 BroadcastChannel，并在不支持时用短期 localStorage 租约兜底；极端浏览器崩溃后最多等待约 6 秒重新选举。
+## ⚠️ 兼容性与限制
 
----
+- 桌面兼容目标为 DeepSeek Harness **0.2.0-rc.2**。客户端仍使用 `platform: web`，与官方桌面 Web 渲染器一致。
+- 保留旧 Web 导航兜底；其他 DSH 版本、操作系统及浏览器需要各自验收，不代表已全部验证。
+- 应用或页面必须保持运行；不提供关闭应用后的推送、自定义声音或外部消息渠道。
+- 仅识别明确审批/提问事件和结构化提问工具调用，不从普通聊天文本推断通知。未知事件日志只记录类型和字段名。
+- 系统通知权限、专注模式和浏览器限制可能阻止提醒显示。测试通知发送未抛错不等于系统横幅已显示。
+- 窗口崩溃或后台计时器节流可能延迟多窗口重新选举。
 
-## 🤝 贡献
+## 🤝 贡献与许可证
 
-欢迎提交 Issue 与 Pull Request：提交 Issue 时请提供 DSH 版本、浏览器与操作系统版本、触发的事件类型以及脱敏后的 debug 日志（不要提交聊天正文、审批参数或凭据），反馈地址 [Issues](https://github.com/Ycet/dsh-notifications/issues)；改进请按 Fork → 分支 → PR 流程提交，并说明新增事件契约及兼容版本。
+通过 [Issues](https://github.com/Ycet/dsh-notifications/issues) 提供 DSH 版本、操作系统、通知权限和脱敏复现步骤。贡献按 Fork → 分支 → Pull Request 提交；不要提交聊天内容、工具参数或凭据。
 
----
-
-## 📄 许可证
-
-本项目使用 [MIT](LICENSE) 许可证。
+许可证：[MIT](LICENSE)。

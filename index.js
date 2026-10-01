@@ -1,7 +1,6 @@
-import z from "schemastery";
+import z from "@deepseek-ai/schemastery";
 import { createEventClassifier, eventContract } from "./lib/classifier.js";
 import { createEventHub } from "./lib/event-hub.js";
-import { createStateTracker } from "./lib/state.js";
 
 export const name = "dsh-notifications";
 export const inject = ["webServer", "settings"];
@@ -13,8 +12,7 @@ export const DEFAULTS = Object.freeze({
   questionPendingEnabled: true,
   taskSucceededEnabled: true,
   taskFailedEnabled: true,
-  subagentTaskEndedEnabled: true,
-  faviconEnabled: true
+  subagentTaskEndedEnabled: true
 });
 
 export const SettingsSchema = z.object({
@@ -23,13 +21,16 @@ export const SettingsSchema = z.object({
   questionPendingEnabled: z.boolean().default(DEFAULTS.questionPendingEnabled),
   taskSucceededEnabled: z.boolean().default(DEFAULTS.taskSucceededEnabled),
   taskFailedEnabled: z.boolean().default(DEFAULTS.taskFailedEnabled),
-  subagentTaskEndedEnabled: z.boolean().default(DEFAULTS.subagentTaskEndedEnabled),
-  faviconEnabled: z.boolean().default(DEFAULTS.faviconEnabled)
+  subagentTaskEndedEnabled: z.boolean().default(DEFAULTS.subagentTaskEndedEnabled)
 });
+
+/** 新版 DSH 从插件 Config 的 volatile 字段生成持久化设置表单。 */
+export const Config = z.object(Object.fromEntries(
+  Object.entries(DEFAULTS).map(([key, value]) => [key, z.boolean().default(value).volatile()])
+));
 
 export const CONFIG_PATH = "/dsh-notifications/api/config";
 export const EVENTS_PATH = "/dsh-notifications/api/events";
-export const VIEWED_PATH = "/dsh-notifications/api/viewed";
 export const DEBUG_PATH = "/dsh-notifications/api/debug";
 const FLAG_BY_TYPE = Object.freeze({
   approval_pending: "approvalPendingEnabled",
@@ -87,21 +88,31 @@ async function readJson(req) {
   catch { throw new Error("request body is not valid JSON"); }
 }
 
-function configOf(scope) {
-  try { return scope === undefined ? DEFAULTS : { ...DEFAULTS, ...scope.get() }; }
-  catch { return DEFAULTS; }
+function configOf(config) {
+  const result = { ...DEFAULTS };
+  for (const key of Object.keys(DEFAULTS)) {
+    const field = config?.[key];
+    try {
+      const value = typeof field?.get === "function" ? field.get() : field;
+      if (typeof value === "boolean") result[key] = value;
+    } catch { /* 服务关闭时保留默认值。 */ }
+  }
+  return result;
 }
 
 export function normalizeConfig(value) {
-  return { ...DEFAULTS, ...(isPlainObject(value) ? value : {}) };
+  // 只接受仍在使用的开关，旧版图标设置和其他未知字段不再进入通知配置。
+  return Object.fromEntries(Object.entries(DEFAULTS).map(([key, fallback]) =>
+    [key, typeof value?.[key] === "boolean" ? value[key] : fallback]
+  ));
 }
 
-function configView(settings, scope) {
-  const descriptor = settings.describe({ redactSecrets: true }).find((candidate) => String(candidate.ns) === SETTINGS_NAMESPACE);
+function configView(settings, config, entryId) {
+  const descriptor = settings.describe({ redactSecrets: true }).find((candidate) => String(candidate.ns) === entryId);
   return {
-    value: configOf(scope),
+    value: configOf(config),
     revision: descriptor?.revision,
-    writable: scope !== undefined
+    writable: descriptor !== undefined && settings.writable !== false
   };
 }
 
@@ -123,6 +134,19 @@ export function isSubagentSession(session) {
     || (Number.isSafeInteger(header.delegationDepth) && header.delegationDepth > 0);
 }
 
+/** 子代理点击必须携带官方直接父子地址，不能当作普通顶层会话打开。 */
+export function notificationAddress(session, ctx) {
+  if (!isSubagentSession(session) || typeof session.header.parentSession !== "string") return undefined;
+  try {
+    // 使用官方投影读取身份，不扫描私有日志或调用已弃用的同步历史接口。
+    const mode = ctx?.get?.("sessionProjections")?.stateOf(session, "subagent")?.identity?.mode;
+    if (mode === "one-shot" || mode === "continuable") {
+      return { parentSessionId: session.header.parentSession, childSessionId: session.id, mode };
+    }
+  } catch { /* 旧版未公开子代理投影时，客户端使用已发现的地址兜底。 */ }
+  return undefined;
+}
+
 export function notificationEnabled(config, type, session) {
   const flag = FLAG_BY_TYPE[type];
   if (config.enabled !== true || flag === undefined || config[flag] !== true) return false;
@@ -130,34 +154,22 @@ export function notificationEnabled(config, type, session) {
   return !taskEnded || !isSubagentSession(session) || config.subagentTaskEndedEnabled === true;
 }
 
-export function apply(ctx) {
-  let scope;
-  try { scope = ctx.settings.register(SETTINGS_NAMESPACE, SettingsSchema); }
-  catch (error) { ctx.logger?.warn?.(`dsh-notifications: settings registration failed: ${String(error)}`); }
+export function apply(ctx, config = Config({})) {
+  // 设置 API 以 Loader entry id 定址，不能用旧 settings.yaml 的段名。
+  const entryId = ctx.fiber?.entry?.options?.id ?? "notifications";
 
   const classifier = createEventClassifier();
-  const tracker = createStateTracker();
   const hub = createEventHub();
   const diagnostics = new Map();
-  let lastLevel = null;
-
-  const broadcast = () => {
-    const level = tracker.aggregate();
-    if (level !== lastLevel) {
-      lastLevel = level;
-      hub.publishState(level);
-    }
-  };
-
   const offSession = ctx.on("session/event", (session, event) => {
     const sessionId = session?.id;
     if (typeof sessionId !== "string") return;
     try {
       const notification = classifier.classify(sessionId, event);
-      if (notification !== undefined && notificationEnabled(configOf(scope), notification.type, session)) hub.publish(notification);
-      if (!isSubagentSession(session)) {
-        tracker.apply(sessionId, event);
-        broadcast();
+      if (notification !== undefined && notificationEnabled(configOf(config), notification.type, session)) {
+        const address = notificationAddress(session, ctx);
+        hub.publish({ ...notification, subagent: isSubagentSession(session),
+          ...(address === undefined ? {} : { address }) });
       }
       if (notification === undefined && typeof event?.type === "string") {
         const previous = diagnostics.get(event.type) || 0;
@@ -170,15 +182,13 @@ export function apply(ctx) {
     } catch (error) {
       ctx.logger?.warn?.(`dsh-notifications: event classification failed for ${String(event?.type || "unknown")}: ${String(error)}`);
     }
-  });
+  }, { global: true });
 
   const offDisposed = ctx.on("session/disposed", (session) => {
     if (typeof session?.id === "string") {
       classifier.disposeSession(session.id);
-      tracker.disposeSession(session.id);
-      broadcast();
     }
-  });
+  }, { global: true });
 
   ctx.effect(() => {
     const offConfig = ctx.webServer.register({
@@ -187,15 +197,15 @@ export function apply(ctx) {
       handler: async (req, res) => {
         if (!trustedRequest(req, ctx)) return sendJson(res, 403, { ok: false, error: { code: "forbidden", message: "forbidden" } });
         try {
-          if (req.method === "GET") return sendJson(res, 200, { ok: true, ...configView(ctx.settings, scope) });
+          if (req.method === "GET") return sendJson(res, 200, { ok: true, ...configView(ctx.settings, config, entryId) });
           if (req.method !== "POST") return sendJson(res, 405, { ok: false, error: { code: "method-error", message: "method not allowed" } });
-          if (scope === undefined) return sendJson(res, 503, { ok: false, error: { code: "settings-unavailable", message: "settings service is unavailable" } });
+          if (!configView(ctx.settings, config, entryId).writable) return sendJson(res, 503, { ok: false, error: { code: "settings-unavailable", message: "settings service is unavailable" } });
           const body = await readJson(req);
           if (!isPlainObject(body)) throw new Error("request body must be an object");
           const expectedRevision = typeof body.expectedRevision === "number" ? body.expectedRevision : undefined;
-          if (body.reset === true) await ctx.settings.replace(SETTINGS_NAMESPACE, {}, expectedRevision);
-          else await ctx.settings.update(SETTINGS_NAMESPACE, normalizePatch(body.patch), expectedRevision);
-          return sendJson(res, 200, { ok: true, ...configView(ctx.settings, scope) });
+          if (body.reset === true) await ctx.settings.replace(entryId, {}, expectedRevision);
+          else await ctx.settings.update(entryId, normalizePatch(body.patch), expectedRevision);
+          return sendJson(res, 200, { ok: true, ...configView(ctx.settings, config, entryId) });
         } catch (error) {
           const conflict = error !== null && typeof error === "object" && error.code === "SETTINGS_CONFLICT";
           return sendJson(res, conflict ? 409 : 400, {
@@ -205,31 +215,13 @@ export function apply(ctx) {
         }
       }
     });
-    const offViewed = ctx.webServer.register({
-      kind: "exact",
-      path: VIEWED_PATH,
-      handler: async (req, res) => {
-        if (!trustedRequest(req, ctx)) return sendJson(res, 403, { ok: false, error: { code: "forbidden", message: "forbidden" } });
-        if (req.method !== "POST") return sendJson(res, 405, { ok: false, error: { code: "method-error", message: "method not allowed" } });
-        try {
-          const body = await readJson(req);
-          const sessionId = isPlainObject(body) && typeof body.sessionId === "string" ? body.sessionId : "";
-          if (sessionId === "") return sendJson(res, 400, { ok: false, error: { code: "invalid-body", message: "sessionId is required" } });
-          tracker.markViewed(sessionId, { pendingSafe: body.pendingSafe === true });
-          broadcast();
-          return sendJson(res, 200, { ok: true, level: lastLevel });
-        } catch (error) {
-          return sendJson(res, 400, { ok: false, error: { code: "invalid-body", message: error instanceof Error ? error.message : String(error) } });
-        }
-      }
-    });
     const offDebug = ctx.webServer.register({
       kind: "exact",
       path: DEBUG_PATH,
       handler: (req, res) => {
         if (!trustedRequest(req, ctx)) return sendJson(res, 403, { ok: false, error: { code: "forbidden", message: "forbidden" } });
         if (req.method !== "GET") return sendJson(res, 405, { ok: false, error: { code: "method-error", message: "method not allowed" } });
-        return sendJson(res, 200, { ok: true, level: lastLevel, clients: hub.clientCount(), sessions: tracker.snapshot() });
+        return sendJson(res, 200, { ok: true, clients: hub.clientCount(), bufferedEvents: hub.snapshot().length });
       }
     });
     const offEvents = ctx.webServer.register({
@@ -244,7 +236,6 @@ export function apply(ctx) {
     return () => {
       offEvents();
       offDebug();
-      offViewed();
       offConfig();
       hub.close();
       offSession();

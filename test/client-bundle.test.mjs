@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("built client registers the official plugin settings item and required runtime paths", () => {
+test("built client registers an independent settings page and required runtime paths", () => {
   const bundle = readFileSync(new URL("../client.js", import.meta.url), "utf8");
   assert.match(bundle, /id: "dsh-notifications"/);
-  assert.match(bundle, /settings\.plugin\.item/);
+  assert.match(bundle, /settings\.section/);
+  assert.doesNotMatch(bundle, /settings\.plugins\.tab/);
   assert.match(bundle, /aria-expanded/);
   assert.match(bundle, /dsh-notify-card/);
   assert.match(bundle, /dsh-notify-body/);
@@ -17,28 +18,14 @@ test("built client registers the official plugin settings item and required runt
   assert.match(bundle, /aria-label/);
   assert.match(bundle, /data-disabled/);
   assert.match(bundle, /disabled: !draft\.enabled/);
-  assert.doesNotMatch(bundle, /MutationObserver/);
+  assert.match(bundle, /data-dsh-notifications-nav-icon/);
 });
 
-test("built client carries the favicon status indicator feature", () => {
+test("desktop client removes icon mutation and carries native session navigation", () => {
   const bundle = readFileSync(new URL("../client.js", import.meta.url), "utf8");
-  assert.match(bundle, /faviconEnabled/);
-  assert.match(bundle, /dsh-notifications\/api\/viewed/);
-  assert.match(bundle, /addEventListener\([^)]*"blur"/);
-  assert.match(bundle, /useSessionPendingInteraction/);
-  assert.match(bundle, /dsh-notifications-pending-interactions/);
-  assert.match(bundle, /setPendingInteractions/);
-  assert.doesNotMatch(bundle, /row\.pendingInteraction/);
-  assert.match(bundle, /document.hasFocus/);
-  assert.match(bundle, /dsh-notify-legend/);
-  assert.match(bundle, /addEventListener\([^)]*"state"/);
-  assert.match(bundle, /F5C518/);
-  assert.match(bundle, /E5484D/);
-  assert.match(bundle, /30A46C/);
-  assert.match(bundle, /link\[rel=.icon.\]/);
-  assert.match(bundle, /__DSH_FILL__/);
-  assert.match(bundle, /encodeURIComponent/);
-  assert.match(bundle, /level === "green"/);
-  assert.match(bundle, /visibilitychange/);
-  assert.match(bundle, /addEventListener\([^)]*"focus"/);
+  assert.doesNotMatch(bundle, /faviconEnabled|__DSH_FILL__|api\/viewed|dsh-notify-legend/);
+  assert.match(bundle, /adapter.*current/);
+  assert.match(bundle, /workspace\.openSession/);
+  assert.match(bundle, /childSessionId/);
+  assert.match(bundle, /desktopPermissionDesc/);
 });

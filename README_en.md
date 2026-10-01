@@ -1,231 +1,137 @@
 # dsh-notifications
 
+Desktop and Web alerts for DeepSeek Harness approvals, structured questions and task outcomes, with session navigation.
+
 [![简体中文](https://img.shields.io/badge/简体中文-red?style=for-the-badge)](README.md)
 [![English](https://img.shields.io/badge/English-blue?style=for-the-badge)](README_en.md)
 
-<div align="center">
-
-A DeepSeek Harness (DSH) web notification plugin: reminds users via browser notifications when a session is waiting for approval, asks a structured question, completes successfully, or fails — click the notification to open the corresponding session. It also colors the tab's whale icon to show the aggregate status of your sessions at a glance.
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg?style=for-the-badge)](package.json)
-[![DSH](https://img.shields.io/badge/DSH-0.1.0--rc.6%2B-purple.svg?style=for-the-badge)](https://github.com/deepseek-ai/deepseek-harness)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue.svg?style=for-the-badge)](package.json)
 
-</div>
+## 📑 Contents
 
----
-
-## 📑 Table of Contents
-
-- [📸 Preview](#-preview)
-- [✨ Features](#-features)
-- [🚀 Quick Start](#-quick-start)
-- [📖 Usage](#-usage)
-- [⚙️ Configuration](#️-configuration)
-- [🔧 How It Works](#-how-it-works)
-- [🧪 Development & Testing](#-development--testing)
-- [⚠️ Known Limitations](#️-known-limitations)
-- [🤝 Contributing](#-contributing)
-- [📄 License](#-license)
-
----
-
-## 📸 Preview
-
-Plugin configuration list (the "Notifications" entry under Settings → Plugins → Plugin configuration):
-
-![Notification plugin configuration list](docs/images/notification-settings-ui-01.png)
-
-The expanded "Notifications" configuration panel (notification toggles, browser permission and action buttons):
-
-![Notification plugin expanded configuration](docs/images/notification-settings-ui-02.png)
-
----
+- [Features](#-features)
+- [Quick start](#-quick-start)
+- [Usage and settings](#-usage-and-settings)
+- [Architecture](#-architecture)
+- [Development and tests](#-development-and-tests)
+- [Compatibility and limits](#-compatibility-and-limits)
+- [Contributing and license](#-contributing-and-license)
 
 ## ✨ Features
 
-| Feature | Description |
-|---------|-------------|
-| **All-session watching** | Watches all DSH sessions, not only the currently open session |
-| **Four notification types** | Approval pending, question pending, task succeeded, task failed |
-| **Independent subagent toggles** | Enable or disable subagent task-success and task-failure notifications independently |
-| **Tab icon status colors** | The tab whale icon turns yellow/red/green when sessions are pending, failed, or completed (priority yellow > red > green); opening the matching conversation restores the default |
-| **Independent icon toggle** | Favicon coloring is independent of the notification master switch and needs no browser permission |
-| **Foreground suppression** | Suppresses duplicate alerts while the current session is being viewed in the foreground |
-| **Single-tab delivery** | With multiple DSH tabs open, only one tab sends notifications |
-| **Click to open** | Clicking a notification focuses DSH and opens the corresponding session (focuses the page only if the session no longer exists) |
-| **Dedicated config module** | A dedicated configuration module under "Settings → Plugins → Plugin configuration" |
-| **Privacy-safe** | Notification events contain no chat content, question content, approval parameters or tool parameters |
-| **Bilingual UI** | Chinese and English UI, following DSH's active language |
+| Feature | Behavior |
+| --- | --- |
+| All-session alerts | Approvals, structured questions, success and failure; cancellation and abort remain silent |
+| Desktop and Web | Notification API delivery; Desktop notifications are displayed by the OS |
+| Foreground suppression | Suppress the selected session when visible and focused; supports the new main-view binding |
+| Deduplication | Process each event once; elect a sender across windows using BroadcastChannel or a localStorage lease |
+| Session navigation | Workspace navigation and official parent/child addresses, with legacy Web fallbacks |
+| Subagent switch | Disable child task results while retaining child approval and question alerts |
+| Dedicated settings | Settings → Notifications with a bell icon, bilingual controls, stream status, permission checks, test results, save and reset |
+| Minimal event data | SSE excludes chat text, questions, approval arguments and tool arguments |
 
----
+**v0.3.1 moves configuration to Settings → Notifications, preserving existing switches and saved configuration.** Whale icon recoloring, color display and its state tracking have been removed. Legacy `faviconEnabled` values are ignored.
 
-## 🚀 Quick Start
+## 🚀 Quick start
 
-### Prerequisites
+Run `pnpm install` and `pnpm build` in the source directory, then replace the path placeholder with the source path.
 
-- DSH CLI and pnpm installed (`dsh plugin` forwards to pnpm internally)
-- Compatible with DeepSeek Harness `0.1.0-rc.6` / `0.1.0-rc.7` series; Windows / macOS / Linux; Chromium-based browsers (Chrome, Edge, Brave, etc.)
-- The DSH page must stay open; notifications cannot be delivered after the browser closes
+### macOS Desktop
 
-### Install
+Fully quit DeepSeek Harness and install using the official bundled CLI:
 
 ```sh
-# Option 1: install from GitHub
-dsh plugin --profile <profile> add github:Ycet/dsh-notifications
-
-# Option 2: install from a local source directory (development)
-dsh plugin --profile <profile> add dsh-notifications@file:<absolute-path-to-plugin>
+"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add "dsh-notifications@link:<absolute-path-to-plugin>"
 ```
 
-The package declares a `dsh.bundle` patch layer; `dsh plugin` merges the loader entry into the profile's bundle layer automatically — no manual editing of `cordis.patch.yml` required.
+Reopen the application, select Notifications in the settings sidebar, check access and send a test notification.
 
-> [!NOTE]
-> `file:` installation uses a snapshot: re-run the install command after updating the source, then restart `dsh web` for it to take effect (bundle-layer changes are not hot-reloaded).
-
-Uninstall:
+### Web
 
 ```sh
-dsh plugin --profile <profile> remove dsh-notifications
+dsh plugin --profile web add "dsh-notifications@link:<absolute-path-to-plugin>"
+dsh web
 ```
 
-### Launch
-
-1. Restart the web app: `dsh web`
-2. Open http://127.0.0.1:3080 and go to "Settings → Plugins → Plugin configuration"
-3. Expand "Notifications", click "Grant notification access" and choose Allow in the browser permission prompt
-
----
-
-## 📖 Usage
-
-1. Install the plugin and restart `dsh web`;
-2. Open "Settings → Plugins → Plugin configuration";
-3. Expand the "Notifications" module;
-4. Click "Grant notification access" and choose Allow in the browser permission prompt;
-5. Click "Send test notification" to verify the browser setup;
-6. Toggle the notification types and the subagent task-ended notifications as needed, then save.
-
-By default, notifications fire only when the DSH tab is in the background or the event comes from a session other than the current one. Clicking a notification focuses DSH and opens the corresponding session; if the target session no longer exists, it only focuses the page.
-
-> [!WARNING]
-> The current DSH origin must be granted browser notification permission. Loopback addresses may use the Web Notification API; browsers may reject non-secure remote HTTP addresses.
-
-### Tab whale icon status
-
-The tab-title whale icon is recolored whenever any non-subagent session is in one of these states:
-
-| Icon color | Condition | Back to default |
-| --- | --- | --- |
-| 🟡 Yellow | A session is waiting for approval / answering a structured question / plan-review | Open that session, or the pending state resolves (answered) |
-| 🔴 Red | A session task failed (not cancelled) and is unviewed | Open that session, or it starts a new turn |
-| 🟢 Green | A session completed and is unviewed | Open that session, or it starts a new turn |
-
-- With multiple states present, **yellow > red > green** wins (e.g. completed + failed + pending sessions show yellow).
-- Opening a session clears only *that session's* contribution; the color disappears only after **all** sessions of that color have been opened.
-- Subagent sessions never affect the icon; manual cancellation (abort) is not a failure.
-- Quick check: make any session wait for approval → the icon turns yellow; open it → the icon restores.
+Open DSH, grant notification access in Notifications settings and send a test notification.
 
 > [!NOTE]
-> Color state lives in host memory: a page refresh restores the current state automatically; restarting `dsh web` clears the state machine and it rebuilds from new events.
+> A `link:` dependency requires keeping its source and resolvable dependencies. Restart after Host or bundle changes; rebuild and refresh after client changes. Installation automatically adds the plugin to the profile bundle list.
 
----
+To uninstall, use the same CLI and profile, replace `add ...` with `remove dsh-notifications`, then restart.
 
-## ⚙️ Configuration
+## 📖 Usage and settings
 
-Settings are stored in the `dsh-notifications` namespace of the DSH settings service:
+Open Settings → Notifications. The configuration card starts expanded. Confirm the alert stream is Connected, adjust switches and save. Category controls are disabled when the master switch is off. A conflicting save from another window shows an error and reloads settings.
 
-| Field | Default | Description |
+| Field | Default | Purpose |
 | --- | --- | --- |
 | `enabled` | `true` | Master switch |
-| `approvalPendingEnabled` | `true` | Approval-pending notifications |
-| `questionPendingEnabled` | `true` | Structured-question notifications |
-| `taskSucceededEnabled` | `true` | Task-succeeded notifications |
-| `taskFailedEnabled` | `true` | Task-failed notifications |
-| `subagentTaskEndedEnabled` | `true` | Subagent task success/failure notifications; turning this off does not affect top-level task notifications |
-| `faviconEnabled` | `true` | Master switch for the tab whale icon status colors; independent of the notification master switch |
+| `approvalPendingEnabled` | `true` | Approval alerts |
+| `questionPendingEnabled` | `true` | Structured question alerts |
+| `taskSucceededEnabled` | `true` | Successful task alerts |
+| `taskFailedEnabled` | `true` | Failed task alerts |
+| `subagentTaskEndedEnabled` | `true` | Subagent success and failure alerts |
 
-Browser permission is not stored in DSH configuration; the browser keeps it independently per DSH origin.
+DSH settings persist configuration by Loader entry id. Notification access belongs to the browser or OS and is not stored in plugin configuration.
 
----
+On Desktop, allow **DeepSeek Harness** in OS notification settings and check Focus mode. The badge reports Notification API access; it cannot detect OS banner or sound suppression. Web requires a secure origin (HTTPS or loopback) and site notification access.
 
-## 🔧 How It Works
+Clicking an alert focuses DSH and opens its session. Deleted targets or unavailable legacy child navigation only focus the window; no replacement session is created.
+
+## 🔧 Architecture
 
 ```mermaid
 flowchart LR
-    E["DSH session/event"] --> C["Host event classifier"]
-    C --> S["Same-origin SSE event stream"]
-    S --> F["Config & foreground filter"]
-    F --> L["Multi-tab leader election"]
-    L --> N["Web Notification API"]
-    N --> O["Click opens sessions.open"]
-    E --> T["Host state machine<br/>(non-subagent only)"]
-    T --> S2["SSE state frame<br/>(yellow/red aggregate)"]
-    S2 --> V["Client combine<br/>yellow > red > green"]
-    B["session list completed"] --> V
-    V --> I["favicon recoloring"]
-    U["Open session (current change)"] --> P["POST /api/viewed"]
-    P --> T
+    E["All-session session/event"] --> C["Host classification and switches"]
+    C --> S["Same-origin SSE"]
+    S --> F["Permission, foreground and deduplication"]
+    F --> L["Sender election"]
+    L --> N["Notification API"]
+    N --> O["Click focus and workspace navigation"]
 ```
 
-The host subscribes to DSH `session/event` and normalizes every event into this safe structure:
-
-```json
-{
-  "eventId": "session-id:sequence:event-type",
-  "type": "approval_pending",
-  "sessionId": "session-id",
-  "occurredAt": 1786953600000
-}
-```
-
-Same-origin endpoints:
+Events contain `eventId`, `type`, `sessionId`, `occurredAt` and `subagent`. Modern child events may include `address` (parent/child IDs and `mode` only), sourced from the official `subagent` projection without reading private logs. Notification bodies contain only the session title.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/dsh-notifications/api/config` | Read configuration and revision |
-| `POST` | `/dsh-notifications/api/config` | Save or restore default configuration |
-| `GET` | `/dsh-notifications/api/events` | SSE notification event stream |
-| `POST` | `/dsh-notifications/api/viewed` | Report an opened session to clear its icon color contribution |
+| GET / POST | `/dsh-notifications/api/config` | Read, save or reset configuration and revision |
+| GET | `/dsh-notifications/api/events` | SSE alert stream |
+| GET | `/dsh-notifications/api/debug` | Client and buffered-event counts without session content |
 
-SSE re-delivers events only after a brief connection drop: the host keeps at most 256 events in memory for 5 minutes; no history is replayed on first connection or after a host restart.
+Routes retain same-origin and trusted-host checks. The official Desktop protocol proxy owns authentication; no additional port is opened. Initial connections do not replay history. Short reconnects replay after Last-Event-ID, with at most 256 events retained for five minutes. Disposal closes SSE, releases election timers and removes settings.
 
-The icon state machine keeps per-**non-subagent**-session "pending / failed / completed / viewed" state from the event stream: `approval/asked ↔ approval/decided`, question tools `tool/call ↔ tool/result`, `turn/start` (new round resets everything), `turn/end` (error → failed, completed → completed, aborted → neutral). The client reports the opened session via `viewed` when the page loads or the current session changes; the host computes the aggregate `state` frame with priority **yellow > red > green** and broadcasts it over SSE. The client adds "completed and unviewed" sessions from the live session list, recolors the whale SVG, and writes it back as the favicon.
+## 🧪 Development and tests
 
----
-
-## 🧪 Development & Testing
-
-```bash
+```sh
 pnpm install
 pnpm build
-pnpm test
 pnpm check
+pnpm test
 ```
 
-The event classifier uses an explicit structural contract: approvals or questions must be the corresponding pending/request events; structured questions also accept explicit tool names such as `request_user_input` inside `tool/call`; plain assistant text is never treated as a question based on question marks. `turn/end` defaults to success, explicit failure results map to failure, and cancellation/abort are not notified. Subagents are identified through official DSH session metadata (`origin: "subagent"` or a positive `delegationDepth`), never inferred from titles or DOM text.
+Tests cover all four alert types, deduplication, foreground suppression, permissions and switches, root and child navigation, save conflicts, SSE replay and cleanup. Redacted fixtures retain the older event contract.
 
-The icon state machine (`lib/state.js`) uses the same keyed-idempotency and monotonic-sequence design: approvals and questions pair by id/callId, duplicate or out-of-order events are safe no-ops, and the sticky "viewed" mark resets only on the session's next `turn/start`.
+Run integration against a prepared official DSH runtime:
 
----
+```sh
+DSH_RUNTIME_DIR="<prepared-dsh-runtime-directory>" pnpm test
+```
 
-## ⚠️ Known Limitations
+The directory must contain official `node_modules`. Without it, only this integration test is skipped. Integration uses real Cordis, SessionStore, subagent services and projections without calling models or external business tools.
 
-- DSH does not yet expose a complete event schema. The plugin logs only the type and field names of unknown events in debug logs (never field values) for easier upgrade adaptation.
-- If the target DSH version provides no official event for a certain state class, that notification will not fire; the plugin never guesses state from DOM text or CSS selectors.
-- Icon coloring depends on the page favicon (`/favicon.svg`): a missing or failed favicon keeps the default icon without blocking anything else.
-- Firefox and Safari are out of scope for the initial acceptance.
-- No native Node notifications, push after browser close, custom notification sounds, or external messaging channels.
-- Multi-tab delivery uses BroadcastChannel, with a short-lived localStorage lease as fallback; after an extreme browser crash, re-election takes at most about 6 seconds.
+## ⚠️ Compatibility and limits
 
----
+- Desktop compatibility targets DeepSeek Harness **0.2.0-rc.2**. The client remains `platform: web`, matching the official Desktop renderer.
+- Legacy Web navigation fallbacks remain. Other versions, OSes and browsers require their own validation; they are not all verified.
+- The application or page must remain running. There is no push after shutdown, custom sound or external messaging channel.
+- Only explicit approval/question events and structured question calls trigger interaction alerts. Ordinary chat text is not scanned. Unknown-event diagnostics log types and field names only.
+- OS settings, Focus mode and browser restrictions can block display. A successful test API call alone does not prove a banner was shown.
+- Window crashes or background timer throttling may delay sender re-election.
 
-## 🤝 Contributing
+## 🤝 Contributing and license
 
-Issues and pull requests are welcome: when filing an issue, provide the DSH version, browser and OS versions, the triggered event type, and sanitized debug logs (never chat content, approval parameters or credentials) at [Issues](https://github.com/Ycet/dsh-notifications/issues); for improvements, follow Fork → branch → PR and describe new event contracts and the compatible versions.
+Use [Issues](https://github.com/Ycet/dsh-notifications/issues) to report DSH and OS versions, notification access and redacted reproduction steps. Contribute through Fork → branch → Pull Request. Do not submit chat contents, tool arguments or credentials.
 
----
-
-## 📄 License
-
-This project is licensed under the [MIT](LICENSE) license.
+License: [MIT](LICENSE).

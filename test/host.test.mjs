@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
-import { apply, CONFIG_PATH, DEBUG_PATH, EVENTS_PATH, VIEWED_PATH, isSubagentSession, normalizeConfig, notificationEnabled, trustedRequest } from "../index.js";
+import { apply, CONFIG_PATH, DEBUG_PATH, EVENTS_PATH, isSubagentSession, normalizeConfig, notificationEnabled, trustedRequest } from "../index.js";
 
 test("normalizes incomplete configuration to defaults", () => {
   assert.deepEqual(normalizeConfig({ enabled: false }), {
@@ -10,8 +10,7 @@ test("normalizes incomplete configuration to defaults", () => {
     questionPendingEnabled: true,
     taskSucceededEnabled: true,
     taskFailedEnabled: true,
-    subagentTaskEndedEnabled: true,
-    faviconEnabled: true
+    subagentTaskEndedEnabled: true
   });
 });
 
@@ -59,16 +58,17 @@ class MockResponse {
   end(body = "") { this.body = body; this.ended = true; }
 }
 
-function mockContext() {
+function mockContext({ descriptorMissing = false } = {}) {
   let value = {};
   let revision = 1;
   const routes = new Map();
   const handlers = new Map();
   const cleanups = [];
   const settings = {
-    register() { return { get: () => normalizeConfig(value) }; },
-    describe() { return [{ ns: "dsh-notifications", revision }]; },
-    async update(_namespace, patch, expectedRevision) {
+    writable: true,
+    describe() { return descriptorMissing ? [] : [{ ns: "notifications", revision }]; },
+    async update(namespace, patch, expectedRevision) {
+      assert.equal(namespace, "notifications");
       if (expectedRevision !== undefined && expectedRevision !== revision) {
         const error = new Error("conflict");
         error.code = "SETTINGS_CONFLICT";
@@ -77,10 +77,12 @@ function mockContext() {
       value = { ...value, ...patch };
       revision += 1;
     },
-    async replace(_namespace, next) { value = next; revision += 1; }
+    async replace(namespace, next) { assert.equal(namespace, "notifications"); value = next; revision += 1; }
   };
+  const config = Object.fromEntries(Object.keys(normalizeConfig({})).map((key) => [key, { get: () => normalizeConfig(value)[key] }]));
   const ctx = {
     settings,
+    fiber: { entry: { options: { id: "notifications" } } },
     webServer: {
       register(route) { routes.set(route.path, route.handler); return () => routes.delete(route.path); }
     },
@@ -99,12 +101,12 @@ function mockContext() {
       if (typeof cleanup === "function") cleanups.push(cleanup);
     }
   };
-  return { ctx, routes, handlers, dispose: () => cleanups.reverse().forEach((cleanup) => cleanup()) };
+  return { ctx, config, routes, handlers, dispose: () => cleanups.reverse().forEach((cleanup) => cleanup()) };
 }
 
 test("host config route reads, validates, updates, and resets settings", async () => {
   const runtime = mockContext();
-  apply(runtime.ctx);
+  apply(runtime.ctx, runtime.config);
   const handler = runtime.routes.get(CONFIG_PATH);
 
   const read = new MockResponse();
@@ -131,118 +133,56 @@ test("host config route reads, validates, updates, and resets settings", async (
   assert.equal(reset.status, 200);
   assert.equal(JSON.parse(reset.body).value.taskFailedEnabled, true);
   assert.equal(JSON.parse(reset.body).value.subagentTaskEndedEnabled, true);
-  assert.equal(JSON.parse(reset.body).value.faviconEnabled, true);
+  assert.equal("faviconEnabled" in JSON.parse(reset.body).value, false);
   runtime.dispose();
 });
 
-test("favicon state machine broadcasts levels over SSE and the viewed route clears them", async () => {
-  const runtime = mockContext();
-  apply(runtime.ctx);
-  const emit = (session, event) => (runtime.handlers.get("session/event") || []).forEach((handler) => handler(session, event));
+test("host config route rejects unavailable forms and stale revisions", async () => {
+  const unavailable = mockContext({ descriptorMissing: true });
+  apply(unavailable.ctx, unavailable.config);
+  const blocked = new MockResponse();
+  await unavailable.routes.get(CONFIG_PATH)(new MockRequest("POST", { patch: { enabled: false } }), blocked);
+  assert.equal(blocked.status, 503);
+  unavailable.dispose();
 
+  const runtime = mockContext();
+  apply(runtime.ctx, runtime.config);
+  const conflict = new MockResponse();
+  await runtime.routes.get(CONFIG_PATH)(new MockRequest("POST", { patch: { enabled: false }, expectedRevision: 0 }), conflict);
+  assert.equal(conflict.status, 409);
+  assert.equal(JSON.parse(conflict.body).error.code, "settings-conflict");
+  runtime.dispose();
+});
+
+test("desktop Host SSE emits all four types without body text or icon frames", () => {
+  const runtime = mockContext();
+  apply(runtime.ctx, runtime.config);
   const stream = new MockResponse();
-  const closeStream = runtime.routes.get(EVENTS_PATH)(new MockRequest("GET"), stream);
-  assert.doesNotMatch(stream.chunks ?? "", /event: state/);
+  const close = runtime.routes.get(EVENTS_PATH)(new MockRequest("GET"), stream);
+  const emit = event => runtime.handlers.get("session/event").forEach(fn => fn({ id: "root", header: {} }, event));
+  emit({ type: "approval/asked", seq: 0, data: { id: "a", arguments: "private-argument" } });
+  emit({ type: "tool/call", seq: 1, data: { name: "ask_user_question", arguments: "private-question" } });
+  emit({ type: "turn/end", seq: 2, data: { reason: { kind: "completed" } } });
+  emit({ type: "turn/end", seq: 3, data: { reason: { kind: "error" } } });
+  emit({ type: "turn/end", seq: 4, data: { reason: { kind: "aborted" } } });
+  const frames = [...stream.chunks.matchAll(/^data: (.+)$/gm)].map(match => JSON.parse(match[1]));
+  assert.deepEqual(frames.map(x => x.type), ["approval_pending", "question_pending", "task_succeeded", "task_failed"]);
+  assert.doesNotMatch(stream.chunks, /private-|arguments|event: state/);
+  assert.equal(runtime.routes.has("/dsh-notifications/api/viewed"), false);
+  close(); runtime.dispose();
+});
 
-  // 非子代理会话失败 → 红色
-  emit({ id: "s1", header: {} }, { type: "turn/start", seq: 1, data: {} });
-  emit({ id: "s1", header: {} }, { type: "turn/end", seq: 2, data: { reason: { kind: "error" } } });
-  assert.match(stream.chunks, /event: state[\s\S]*"level":"red"/);
-
-  // 子代理会话的失败不参与聚合
-  const subagent = { id: "sub1", header: { origin: "subagent", delegationDepth: 1 } };
-  emit(subagent, { type: "turn/start", seq: 1, data: {} });
-  emit(subagent, { type: "turn/end", seq: 2, data: { reason: { kind: "error" } } });
-  assert.equal((stream.chunks.match(/event: state/g) || []).length, 1);
-
-  // 点开对应会话 → 恢复默认
-  const viewed = new MockResponse();
-  await runtime.routes.get(VIEWED_PATH)(new MockRequest("POST", { sessionId: "s1" }), viewed);
-  assert.equal(viewed.status, 200);
-  assert.equal(JSON.parse(viewed.body).ok, true);
-  assert.equal(JSON.parse(viewed.body).level, null);
-  assert.match(stream.chunks, /"level":null/);
-
-  // 缺少 sessionId → 400；GET → 405
-  const bad = new MockResponse();
-  await runtime.routes.get(VIEWED_PATH)(new MockRequest("POST", {}), bad);
-  assert.equal(bad.status, 400);
-  assert.equal(JSON.parse(bad.body).ok, false);
-  const wrongMethod = new MockResponse();
-  await runtime.routes.get(VIEWED_PATH)(new MockRequest("GET"), wrongMethod);
-  assert.equal(wrongMethod.status, 405);
-
-  // faviconEnabled 配置可写
-  const write = new MockResponse();
-  await runtime.routes.get(CONFIG_PATH)(new MockRequest("POST", { patch: { faviconEnabled: false }, expectedRevision: 1 }), write);
-  assert.equal(write.status, 200);
-  assert.equal(JSON.parse(write.body).value.faviconEnabled, false);
-
-  closeStream();
+test("debug exposes stream health without session state or secrets", async () => {
+  const runtime = mockContext(); apply(runtime.ctx, runtime.config);
+  const response = new MockResponse();
+  await runtime.routes.get(DEBUG_PATH)(new MockRequest("GET"), response);
+  assert.deepEqual(JSON.parse(response.body), { ok: true, clients: 0, bufferedEvents: 0 });
   runtime.dispose();
 });
 
-test("debug endpoint exposes the tracker snapshot", async () => {
-  const runtime = mockContext();
-  apply(runtime.ctx);
-  const read = new MockResponse();
-  await runtime.routes.get(DEBUG_PATH)(new MockRequest("GET"), read);
-  assert.equal(read.status, 200);
-  const body = JSON.parse(read.body);
-  assert.equal(body.ok, true);
-  assert.equal(body.level, null);
-  assert.ok(Array.isArray(body.sessions));
-
-  // 触发一个 pending 事件后，快照应反映状态
-  const emit = (session, event) => (runtime.handlers.get("session/event") || []).forEach((handler) => handler(session, event));
-  emit({ id: "s9", header: {} }, { type: "approval/asked", seq: 1, data: { id: "approval-9" } });
-  const after = new MockResponse();
-  await runtime.routes.get(DEBUG_PATH)(new MockRequest("GET"), after);
-  const snapshot = JSON.parse(after.body);
-  assert.equal(snapshot.level, "yellow");
-  assert.deepEqual(snapshot.sessions.find((item) => item.sessionId === "s9").pending, ["a:approval-9"]);
-
-  const wrongMethod = new MockResponse();
-  await runtime.routes.get(DEBUG_PATH)(new MockRequest("POST", {}), wrongMethod);
-  assert.equal(wrongMethod.status, 405);
-  runtime.dispose();
-});
-
-test("viewed route with pendingSafe keeps pending yellow and clears finished colors", async () => {
-  const runtime = mockContext();
-  apply(runtime.ctx);
-  const emit = (session, event) => (runtime.handlers.get("session/event") || []).forEach((handler) => handler(session, event));
-
-  const stream = new MockResponse();
-  const closeStream = runtime.routes.get(EVENTS_PATH)(new MockRequest("GET"), stream);
-
-  // 会话挂起待审批 → 黄色
-  emit({ id: "s1", header: {} }, { type: "approval/asked", seq: 1, data: { id: "approval-1" } });
-  assert.match(stream.chunks, /"level":"yellow"/);
-
-  // pendingSafe 切回页面（待回答未解决）→ 不转为 null
-  const returnView = new MockResponse();
-  await runtime.routes.get(VIEWED_PATH)(new MockRequest("POST", { sessionId: "s1", pendingSafe: true }), returnView);
-  assert.equal(JSON.parse(returnView.body).ok, true);
-  assert.equal(JSON.parse(returnView.body).level, "yellow");
-  assert.doesNotMatch(stream.chunks, /"level":null/);
-
-  // 明确打开（无 pendingSafe）→ 清除黄色
-  const openView = new MockResponse();
-  await runtime.routes.get(VIEWED_PATH)(new MockRequest("POST", { sessionId: "s1" }), openView);
-  assert.equal(JSON.parse(openView.body).level, null);
-  assert.match(stream.chunks, /"level":null/);
-
-  // 新回合：任务完成 → 绿色；切回页面 pendingSafe → 清除
-  emit({ id: "s1", header: {} }, { type: "turn/start", seq: 2, data: {} });
-  assert.match(stream.chunks, /"level":null/);
-  emit({ id: "s1", header: {} }, { type: "turn/end", seq: 3, data: { reason: { kind: "completed" } } });
-  assert.match(stream.chunks, /"level":"green"/);
-  const returnDone = new MockResponse();
-  await runtime.routes.get(VIEWED_PATH)(new MockRequest("POST", { sessionId: "s1", pendingSafe: true }), returnDone);
-  assert.equal(JSON.parse(returnDone.body).level, null);
-  assert.match(stream.chunks, /"level":null/);
-
-  closeStream();
-  runtime.dispose();
+test("legacy icon fields are ignored while supported switches survive migration", () => {
+  const value = normalizeConfig({ faviconEnabled: true, taskFailedEnabled: false, extra: "private" });
+  assert.equal(value.taskFailedEnabled, false);
+  assert.equal("faviconEnabled" in value, false);
+  assert.equal("extra" in value, false);
 });

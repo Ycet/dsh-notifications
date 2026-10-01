@@ -1,24 +1,17 @@
 import React from "react";
-import { detectPendingPlanReview, shouldSurfaceEvent } from "../lib/client-policy.js";
+import { shouldSurfaceEvent } from "../lib/client-policy.js";
+import { installNotificationNavIcon, notificationNavIcon, NOTIFICATION_NAV_ICON_CSS } from "../lib/settings-nav-icon.js";
 
 const NS = "dshNotifications";
 const CONFIG_PATH = "/dsh-notifications/api/config";
 const EVENTS_PATH = "/dsh-notifications/api/events";
-const VIEWED_PATH = "/dsh-notifications/api/viewed";
 const DEFAULTS = Object.freeze({
   enabled: true,
   approvalPendingEnabled: true,
   questionPendingEnabled: true,
   taskSucceededEnabled: true,
   taskFailedEnabled: true,
-  subagentTaskEndedEnabled: true,
-  faviconEnabled: true
-});
-
-const FAVICON_COLORS = Object.freeze({
-  yellow: "F5C518",
-  red: "E5484D",
-  green: "30A46C"
+  subagentTaskEndedEnabled: true
 });
 
 const FLAG_BY_TYPE = Object.freeze({
@@ -43,21 +36,19 @@ const zh = {
   failedDesc: "任务异常结束时通知。",
   subagentEnded: "子代理任务结束",
   subagentEndedDesc: "子代理任务成功或失败时通知。",
-  favicon: "鲸鱼图标状态变化",
-  faviconDesc: "会话待处理、失败或完成时改变标签页鲸鱼图标颜色。",
-  faviconLegend: "颜色优先级：黄（待审批/待回答）＞红（失败）＞绿（已完成，未查看）；点开对应会话后恢复默认色。",
-  faviconStatus: "当前图标状态",
-  faviconStatusDesc: "实时显示聚合状态与着色结果。",
-  favLevelYellow: "黄色（待处理）",
-  favLevelRed: "红色（失败）",
-  favLevelGreen: "绿色（已完成）",
-  favLevelNone: "默认色",
-  favLevelDisabled: "已关闭",
-  favErrorUnavailable: "favicon 不可用",
-  favErrorNoFill: "favicon 无可用着色点",
-  favErrorOk: "着色正常",
-  permission: "浏览器权限",
-  permissionDesc: "通知权限由当前浏览器按 DSH 地址管理。",
+  permission: "通知权限",
+  permissionDesc: "Web 通知由浏览器按 DSH 地址授权；实际提醒还受操作系统通知设置影响。",
+  desktopPermissionDesc: "桌面应用使用系统通知。请在系统设置中允许 DeepSeek Harness 通知，并检查专注模式。",
+  desktopPermissionFailed: "通知 API 未授权。请在系统设置中检查 DeepSeek Harness 的通知权限。",
+  testFailed: "测试通知发送失败，请检查通知权限后重试。",
+  testSent: "已请求显示测试通知；若未看到提醒，请检查系统通知权限和专注模式。",
+  connection: "提醒事件连接",
+  connectionDesc: "断线时自动重连；长时间中断时请重启应用或刷新页面。",
+  connectionConnecting: "正在连接",
+  connectionConnected: "已连接",
+  connectionReconnecting: "重连中",
+  connectionUnavailable: "连接不可用",
+  connectionClosed: "已关闭",
   permissionUnsupported: "不支持",
   permissionDefault: "未授权",
   permissionGranted: "已授权",
@@ -101,21 +92,19 @@ const en = {
   failedDesc: "Notify when a task ends with an error.",
   subagentEnded: "Subagent task ended",
   subagentEndedDesc: "Notify when a subagent task succeeds or fails.",
-  favicon: "Favicon status indicator",
-  faviconDesc: "Recolor the tab whale icon when sessions are pending, failed, or completed.",
-  faviconLegend: "Color priority: yellow (pending) > red (failed) > green (completed, unviewed); opening the matching conversation restores the default.",
-  faviconStatus: "Current status",
-  faviconStatusDesc: "Live aggregate status and coloring result.",
-  favLevelYellow: "Yellow (pending)",
-  favLevelRed: "Red (failed)",
-  favLevelGreen: "Green (completed)",
-  favLevelNone: "Default",
-  favLevelDisabled: "Disabled",
-  favErrorUnavailable: "favicon unavailable",
-  favErrorNoFill: "no recolorable fill",
-  favErrorOk: "coloring OK",
-  permission: "Browser permission",
-  permissionDesc: "Permission is managed by this browser for the current DSH origin.",
+  permission: "Notification permission",
+  permissionDesc: "The browser grants Web notification access per DSH origin. Delivery also depends on OS notification settings.",
+  desktopPermissionDesc: "Desktop uses system notifications. Allow DeepSeek Harness in OS settings and check Focus mode.",
+  desktopPermissionFailed: "Notification API access was not granted. Check DeepSeek Harness in OS notification settings.",
+  testFailed: "The test notification could not be sent. Check notification access and try again.",
+  testSent: "A test notification was requested. If it is missing, check OS notification access and Focus mode.",
+  connection: "Alert stream connection",
+  connectionDesc: "Reconnects automatically. Restart the app or refresh the page if the interruption persists.",
+  connectionConnecting: "Connecting",
+  connectionConnected: "Connected",
+  connectionReconnecting: "Reconnecting",
+  connectionUnavailable: "Unavailable",
+  connectionClosed: "Closed",
   permissionUnsupported: "Unsupported",
   permissionDefault: "Not granted",
   permissionGranted: "Granted",
@@ -155,16 +144,12 @@ const CSS = `
 .dsh-notify-rowText{display:flex;min-width:0;flex-direction:column;gap:2px}.dsh-notify-rowText strong{font-size:14px}.dsh-notify-rowText span{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
 .dsh-notify-switch{position:relative;flex:none;width:42px;height:24px;border:0;border-radius:12px;background:var(--dsw-alias-border-l2);cursor:pointer}.dsh-notify-switch[data-active=true]{background:var(--dsw-alias-state-business-primary)}.dsh-notify-switch:disabled{background:var(--dsw-alias-border-l2);cursor:not-allowed}.dsh-notify-switch:disabled[data-active=true]{background:var(--dsw-alias-label-tertiary)}.dsh-notify-switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform 120ms ease}.dsh-notify-switch[data-active=true] span{transform:translateX(18px)}
 .dsh-notify-permission{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.dsh-notify-badge{border-radius:5px;padding:2px 7px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}.dsh-notify-badge[data-state=granted]{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent)}.dsh-notify-badge[data-state=denied],.dsh-notify-badge[data-state=unsupported]{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent)}
-.dsh-notify-badge[data-fav=yellow]{color:#F5C518;background:color-mix(in srgb,#F5C518 12%,transparent)}
-.dsh-notify-badge[data-fav=red]{color:#E5484D;background:color-mix(in srgb,#E5484D 12%,transparent)}
-.dsh-notify-badge[data-fav=green]{color:#30A46C;background:color-mix(in srgb,#30A46C 12%,transparent)}
-.dsh-notify-badge[data-fav-error=true]{color:var(--dsw-alias-state-error-primary)}
 .dsh-notify-actions{border-top:1px solid var(--dsw-alias-border-l2);display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;flex-wrap:wrap}.dsh-notify-actions button,.dsh-notify-permission button{border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer}.dsh-notify-actions button[data-primary=true]{border-color:transparent;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dsh-notify-actions button:disabled,.dsh-notify-permission button:disabled{opacity:.4;cursor:default}.dsh-notify-actions button:focus-visible,.dsh-notify-permission button:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 .dsh-notify-status{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin:0}.dsh-notify-status[data-error=true]{color:var(--dsw-alias-state-error-primary)}
-.dsh-notify-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0 2px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}.dsh-notify-legendDot{width:14px;height:14px;border-radius:4px;flex:none}
+.dsh-notify-page{max-width:760px;margin:0;padding:0;list-style:none}
 @media (max-width:720px){.dsh-notify-row{align-items:flex-start;flex-direction:column;gap:8px}.dsh-notify-permission{justify-content:flex-start}}
 @media (prefers-reduced-motion:reduce){.dsh-notify-card,.dsh-notify-chevron,.dsh-notify-switch span{transition:none}}
-`;
+` + NOTIFICATION_NAV_ICON_CSS;
 
 function normalizeConfig(value) {
   const config = {};
@@ -214,8 +199,13 @@ function createConfigStore() {
   };
 }
 
-function permissionOf() {
-  return typeof window.Notification === "function" ? window.Notification.permission : "unsupported";
+export function permissionOf() {
+  try { return typeof window.Notification === "function" ? window.Notification.permission : "unsupported"; }
+  catch { return "unsupported"; }
+}
+
+function isDesktop() {
+  return window.location?.protocol === "dsh-app:" && window.dshDesktop?.protocolVersion === 1;
 }
 
 function randomId() {
@@ -294,279 +284,125 @@ function notificationTitle(t, type) {
   }[type]);
 }
 
-/**
- * Recolors the page favicon (the DSH whale) by rewriting the served SVG's
- * fill color into a data URL. The original SVG is fetched once and cached;
- * restore() switches back to the original href. Failures keep the default
- * icon and warn once.
- */
-export function createFaviconController() {
-  let link = null;
-  let originalHref = "";
-  let template = null;
-  let warned = false;
-  let lastError = null;
-  let revision = 0;
+/** 新版主视图绑定优先，避免读取已经撤下的 list.current。 */
+export function currentSessionId(ctx) {
+  try {
+    const uiSession = typeof ctx.get === "function" ? ctx.get("uiSession") : ctx.uiSession;
+    const binding = uiSession?.adapter?.current?.getSnapshot();
+    if (binding !== undefined && binding !== null) return binding.key;
+    const snapshot = ctx.sessions.list.getSnapshot();
+    const retained = Object.values(snapshot.byId || {}).find(row => (row.retainedBy?.mainView ?? 0) > 0);
+    return retained?.id ?? snapshot.current;
+  } catch { return undefined; }
+}
 
-  const findLink = () => {
-    if (link && link.isConnected) return link;
-    link = document.querySelector('link[rel="icon"]');
-    return link;
-  };
+function validAddress(address, sessionId) {
+  return address && typeof address.parentSessionId === "string" && address.parentSessionId !== ""
+    && address.parentSessionId !== sessionId && address.childSessionId === sessionId
+    && (address.mode === "one-shot" || address.mode === "continuable");
+}
 
-  const loadTemplate = async () => {
-    const current = findLink();
-    if (!current || typeof current.href !== "string" || current.href === "") return null;
-    const href = current.href.startsWith("data:") && originalHref !== "" ? originalHref : current.href;
-    if (template === null || originalHref !== href) {
-      const response = await fetch(href);
-      if (!response.ok) return null;
-      const text = await response.text();
-      if (!/<svg[\s\S]*<\/svg>/i.test(text)) return null;
-      originalHref = href;
-      template = text
-        .replace(/<style[\s\S]*?<\/style>/gi, "")
-        .replace(/fill="#0{3}(?:0{3})?"/gi, 'fill="__DSH_FILL__"');
+/** 新版工作区导航支持尚未打开的子代理；旧版 Web 使用原有接口。 */
+export async function openNotificationSession(ctx, event) {
+  window.focus();
+  const sessionId = event.sessionId;
+  try {
+    const knownAddress = ctx.sessions.subagentAddress?.(sessionId);
+    const address = validAddress(event.address, sessionId) ? event.address
+      : validAddress(knownAddress, sessionId) ? knownAddress : undefined;
+    const workspace = typeof ctx.get === "function" ? ctx.get("uiWorkspace") : ctx.uiWorkspace;
+    if (address !== undefined) {
+      if (typeof workspace?.openSession === "function") { await workspace.openSession(address); return true; }
+      if (typeof ctx.sessions.openSubagent === "function") { await ctx.sessions.openSubagent(address); return true; }
+      return false;
     }
-    return template;
-  };
-
-  return {
-    async apply(level) {
-      const request = ++revision;
-      lastError = null;
-      if (level !== "yellow" && level !== "red" && level !== "green") {
-        const current = findLink();
-        if (current && originalHref !== "" && current.href !== originalHref) current.href = originalHref;
-        return;
-      }
-      try {
-        const source = await loadTemplate();
-        if (request !== revision) return;
-        if (source === null) {
-          lastError = "unavailable";
-          if (!warned) { warned = true; console.warn("[dsh-notifications] favicon is unavailable, keeping the default icon"); }
-          return;
-        }
-        if (!source.includes("__DSH_FILL__")) {
-          lastError = "no-fill";
-          if (!warned) { warned = true; console.warn("[dsh-notifications] favicon has no recolorable fill, keeping the default icon"); }
-          return;
-        }
-        const svg = source.replaceAll("__DSH_FILL__", `#${FAVICON_COLORS[level]}`);
-        const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-        const current = findLink();
-        if (current && current.href !== url) current.href = url;
-        warned = false;
-      } catch (error) {
-        if (request !== revision) return;
-        lastError = String(error);
-        if (!warned) { warned = true; console.warn("[dsh-notifications] favicon update failed", error); }
-      }
-    },
-    getStatus() { return { lastError }; }
-  };
-}
-
-/**
- * Combines host-pushed levels with client-side plan-review pending state.
- * A selected session is viewed only while the page is visible and focused.
- * Opening it or returning to the page acknowledges its existing host state.
- * Priority yellow > red > green is applied last.
- */
-export function createStateController({ controller, store, sessions }) {
-  let yellow = false;
-  let red = false;
-  let green = false;
-  let planReviewPending = false;
-  let pendingInteractions = new Map();
-  let lastCurrentId;
-  const listeners = new Set();
-
-  const currentLevel = () => {
-    if (store.getSnapshot().value.faviconEnabled !== true) return null;
-    return (yellow || planReviewPending) ? "yellow" : red ? "red" : green ? "green" : null;
-  };
-
-  const apply = () => {
-    controller.apply(currentLevel());
-    listeners.forEach((listener) => { try { listener(); } catch {} });
-  };
-
-  const isForeground = () => document.visibilityState === "visible"
-    && (typeof document.hasFocus !== "function" || document.hasFocus());
-
-  const refreshPlanReview = () => {
-    let next = false;
-    try {
-      const snapshot = sessions.list.getSnapshot();
-      next = detectPendingPlanReview(pendingInteractions, snapshot.byId || {}, isForeground() ? snapshot.current : undefined);
-    } catch {}
-    if (next !== planReviewPending) { planReviewPending = next; apply(); }
-  };
-
-  const reportViewed = (sessionId) => {
-    if (typeof sessionId !== "string" || sessionId === "") return;
-    const body = JSON.stringify({ sessionId });
-    fetch(VIEWED_PATH, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "content-type": "application/json" },
-      body
-    }).catch(() => {});
-  };
-
-  const watchCurrent = () => {
-    if (!isForeground()) return;
-    let current;
-    try { current = sessions.list.getSnapshot().current; } catch { return; }
-    if (typeof current === "string" && current !== "" && current !== lastCurrentId) reportViewed(current);
-    lastCurrentId = current;
-  };
-
-  // Returning to the page is the same acknowledgement as opening a session.
-  // Do not rely on running/pending rows: their transport may lag behind SSE.
-  const reportCurrentViewed = () => {
-    if (!isForeground()) return;
-    let current;
-    try { current = sessions.list.getSnapshot().current; } catch { return; }
-    reportViewed(current);
-  };
-
-  return {
-    setPendingInteractions(snapshot) {
-      pendingInteractions = snapshot && (typeof snapshot.get === "function" || typeof snapshot === "object")
-        ? snapshot
-        : new Map();
-      refreshPlanReview();
-    },
-    handleState(message) {
-      try {
-        const payload = JSON.parse(message.data);
-        const nextYellow = payload?.level === "yellow";
-        const nextRed = payload?.level === "red";
-        const nextGreen = payload?.level === "green";
-        if (nextYellow !== yellow || nextRed !== red || nextGreen !== green) {
-          yellow = nextYellow;
-          red = nextRed;
-          green = nextGreen;
-          apply();
-          // State can arrive after the focus event when a background tab resumes.
-          if (payload.level != null) reportCurrentViewed();
-        }
-      } catch {}
-    },
-    start() {
-      const disposers = [store.subscribe(() => apply())];
-      try { disposers.push(sessions.list.subscribe(() => { refreshPlanReview(); watchCurrent(); })); } catch {}
-      refreshPlanReview();
-      watchCurrent();
-      const onVisibility = () => { refreshPlanReview(); reportCurrentViewed(); apply(); };
-      const onFocus = onVisibility;
-      const onBlur = () => { refreshPlanReview(); apply(); };
-      if (typeof document?.addEventListener === "function" && typeof window?.addEventListener === "function") {
-        document.addEventListener("visibilitychange", onVisibility);
-        window.addEventListener("focus", onFocus);
-        window.addEventListener("blur", onBlur);
-        disposers.push(() => {
-          document.removeEventListener("visibilitychange", onVisibility);
-          window.removeEventListener("focus", onFocus);
-          window.removeEventListener("blur", onBlur);
-        });
-      }
-      return () => disposers.forEach((dispose) => { try { dispose(); } catch {} });
-    },
-    getLevel() { return currentLevel(); },
-    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); }
-  };
-}
-
-/**
- * Receives rc.1's root pending-interaction Hook through shell.overlay. The
- * bridge renders nothing, but remains mounted even while Settings is closed,
- * so a background plan-review can still drive the favicon.
- */
-function PendingInteractionBridge({ useSessionPendingInteraction, stateController }) {
-  if (typeof useSessionPendingInteraction !== "function") return null;
-  return React.createElement(PendingInteractionBridgeActive, { useSessionPendingInteraction, stateController });
-}
-
-function PendingInteractionBridgeActive({ useSessionPendingInteraction, stateController }) {
-  const pendingInteractions = useSessionPendingInteraction((snapshot) => snapshot);
-  React.useEffect(() => {
-    stateController.setPendingInteractions(pendingInteractions);
-  }, [stateController, pendingInteractions]);
-  return null;
+    // 缺少父子地址时不把子代理误当成顶层会话。已删除的普通会话仅聚焦。
+    if (event.subagent === true) return false;
+    if (ctx.sessions.list.getSnapshot().byId[sessionId] === undefined) await ctx.sessions.refresh?.();
+    if (ctx.sessions.list.getSnapshot().byId[sessionId] === undefined) return false;
+    if (typeof workspace?.openSession === "function") { await workspace.openSession(sessionId); return true; }
+    if (typeof ctx.sessions.open === "function") { await ctx.sessions.open(sessionId); return true; }
+    return false;
+  } catch (error) {
+    ctx.logger?.warn?.("dsh-notifications: could not open notification session", error);
+    return false;
+  }
 }
 
 export function createNotificationController(ctx, store, t, options = {}) {
   const seen = new Set();
-  const leader = createLeaderElector();
+  const leader = options.leader || createLeaderElector();
   let source;
-  const onState = typeof options.onState === "function" ? options.onState : null;
-  const onDispose = typeof options.onDispose === "function" ? options.onDispose : null;
+  let disposed = false;
+  let connection = "Connecting";
+  const listeners = new Set();
+  const setConnection = (next) => {
+    if (connection === next) return;
+    connection = next;
+    for (const listener of listeners) listener();
+  };
 
   const remember = (id) => {
     seen.add(id);
     if (seen.size > 512) seen.delete(seen.values().next().value);
   };
 
-  const shouldNotify = (event) => {
-    let current;
-    try { current = ctx.sessions.list.getSnapshot().current; } catch {}
-    return shouldSurfaceEvent({
+  const show = (title, details, onClick) => {
+    try {
+      const notification = new window.Notification(title, details);
+      notification.onclick = () => { void onClick(); notification.close(); };
+      return true;
+    } catch (error) {
+      ctx.logger?.warn?.("dsh-notifications: notification could not be sent", error);
+      return false;
+    }
+  };
+
+  const handle = (event) => {
+    if (disposed || !event || typeof event.eventId !== "string" || typeof event.sessionId !== "string" || !(event.type in FLAG_BY_TYPE)) return;
+    if (seen.has(event.eventId)) return;
+    remember(event.eventId);
+    if (!leader.isLeader() || !shouldSurfaceEvent({
       config: store.getSnapshot().value,
       event,
       permission: permissionOf(),
       visibilityState: document.visibilityState,
-      documentHasFocus: document.hasFocus(),
-      currentSessionId: current
-    });
-  };
-
-  const openSession = (sessionId) => {
-    window.focus();
-    try {
-      if (ctx.sessions.list.getSnapshot().byId[sessionId] !== undefined) ctx.sessions.open?.(sessionId);
-    } catch {}
-  };
-
-  const handle = (event) => {
-    if (!event || typeof event.eventId !== "string" || typeof event.sessionId !== "string" || !(event.type in FLAG_BY_TYPE)) return;
-    if (seen.has(event.eventId)) return;
-    remember(event.eventId);
-    if (!leader.isLeader() || !shouldNotify(event)) return;
-    const notification = new window.Notification(notificationTitle(t, event.type), {
+      documentHasFocus: typeof document.hasFocus === "function" ? document.hasFocus() : true,
+      currentSessionId: currentSessionId(ctx)
+    })) return;
+    show(notificationTitle(t, event.type), {
       body: `${t("conversation")}：${sessionTitle(ctx, event.sessionId)}`,
       tag: event.eventId,
       renotify: false
-    });
-    notification.onclick = () => {
-      openSession(event.sessionId);
-      notification.close();
-    };
+    }, () => openNotificationSession(ctx, event));
   };
 
   return {
+    getSnapshot: () => connection,
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     start() {
-      if (typeof EventSource !== "function") return () => { leader.dispose(); onDispose?.(); };
-      source = new EventSource(EVENTS_PATH);
-      source.addEventListener("notification", (message) => {
-        try { handle(JSON.parse(message.data)); }
-        catch (error) { console.warn("[dsh-notifications] invalid event", error); }
-      });
-      if (onState !== null) source.addEventListener("state", onState);
+      try {
+        if (typeof EventSource === "function") {
+          // 桌面官方同源协议支持 SSE，并在主进程代理中保留认证和取消信号。
+          source = new EventSource(EVENTS_PATH);
+          source.addEventListener("open", () => { if (!disposed) setConnection("Connected"); });
+          source.addEventListener("error", () => { if (!disposed) setConnection("Reconnecting"); });
+          source.addEventListener("notification", (message) => {
+            try { handle(JSON.parse(message.data)); }
+            catch { ctx.logger?.warn?.("dsh-notifications: invalid notification event"); }
+          });
+        } else setConnection("Unavailable");
+      } catch { setConnection("Unavailable"); ctx.logger?.warn?.("dsh-notifications: notification stream unavailable"); }
       return () => {
+        disposed = true;
         source?.close();
         leader.dispose();
-        onDispose?.();
+        setConnection("Closed");
       };
     },
     test() {
-      if (permissionOf() !== "granted") return false;
-      const notification = new window.Notification(t("testTitle"), { body: t("testBody"), tag: `dsh-notifications:test:${Date.now()}` });
-      notification.onclick = () => { window.focus(); notification.close(); };
-      return true;
+      if (disposed || permissionOf() !== "granted") return false;
+      return show(t("testTitle"), { body: t("testBody"), tag: `dsh-notifications:test:${Date.now()}` }, () => window.focus());
     }
   };
 }
@@ -608,17 +444,15 @@ function configsEqual(left, right) {
   return Object.keys(DEFAULTS).every((key) => left[key] === right[key]);
 }
 
-function SettingsCard({ store, controller, t, stateController, favicon }) {
+function SettingsCard({ store, controller, t }) {
   const snapshot = useStore(store);
+  const connection = useStore(controller);
   const [draft, setDraft] = React.useState(snapshot.value);
   const [permission, setPermission] = React.useState(permissionOf());
   const [state, setState] = React.useState({ saving: false, error: "" });
-  const [open, setOpen] = React.useState(false);
-  const [favState, setFavState] = React.useState(() => ({ level: stateController.getLevel(), error: favicon.getStatus().lastError }));
+  const [open, setOpen] = React.useState(true);
+  const [testResult, setTestResult] = React.useState("");
   React.useEffect(() => setDraft(snapshot.value), [snapshot.value]);
-  React.useEffect(() => stateController.subscribe(() => {
-    setFavState({ level: stateController.getLevel(), error: favicon.getStatus().lastError });
-  }), [stateController, favicon]);
   const dirty = !configsEqual(draft, snapshot.value);
   const patch = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const authorize = async () => {
@@ -627,8 +461,8 @@ function SettingsCard({ store, controller, t, stateController, favicon }) {
       if (permissionOf() === "default") await window.Notification.requestPermission();
       const next = permissionOf();
       setPermission(next);
-      if (next !== "granted") setState((current) => ({ ...current, error: t("permissionFailed") }));
-    } catch { setPermission(permissionOf()); setState((current) => ({ ...current, error: t("permissionFailed") })); }
+      if (next !== "granted") setState((current) => ({ ...current, error: t(isDesktop() ? "desktopPermissionFailed" : "permissionFailed") }));
+    } catch { setPermission(permissionOf()); setState((current) => ({ ...current, error: t(isDesktop() ? "desktopPermissionFailed" : "permissionFailed") })); }
   };
   const save = async () => {
     setState({ saving: true, error: "" });
@@ -642,6 +476,12 @@ function SettingsCard({ store, controller, t, stateController, favicon }) {
     setState({ saving: true, error: "" });
     try { await store.reset(); setState({ saving: false, error: "" }); }
     catch { setState({ saving: false, error: t("saveFailed") }); }
+  };
+  const testNotification = () => {
+    // 发送操作放在事件处理器中，避免 React 重复执行状态更新器时重复通知。
+    const sent = controller.test();
+    setTestResult(sent ? t("testSent") : "");
+    setState((current) => ({ ...current, error: sent ? "" : t("testFailed") }));
   };
   const h = React.createElement;
   return h("li", { className: "dsh-notify-card", "data-open": open ? "true" : undefined },
@@ -666,33 +506,22 @@ function SettingsCard({ store, controller, t, stateController, favicon }) {
       h(ToggleRow, { title: t("succeeded"), description: t("succeededDesc"), checked: draft.taskSucceededEnabled, disabled: !draft.enabled, onChange: (value) => patch("taskSucceededEnabled", value) }),
       h(ToggleRow, { title: t("failed"), description: t("failedDesc"), checked: draft.taskFailedEnabled, disabled: !draft.enabled, onChange: (value) => patch("taskFailedEnabled", value) }),
       h(ToggleRow, { title: t("subagentEnded"), description: t("subagentEndedDesc"), checked: draft.subagentTaskEndedEnabled, disabled: !draft.enabled, onChange: (value) => patch("subagentTaskEndedEnabled", value) }),
-      h(ToggleRow, { title: t("favicon"), description: t("faviconDesc"), checked: draft.faviconEnabled, onChange: (value) => patch("faviconEnabled", value) }),
-      h("div", { className: "dsh-notify-legend" },
-        h("span", { className: "dsh-notify-legendDot", style: { background: "#F5C518" } }),
-        h("span", { className: "dsh-notify-legendDot", style: { background: "#E5484D" } }),
-        h("span", { className: "dsh-notify-legendDot", style: { background: "#30A46C" } }),
-        h("span", null, t("faviconLegend"))
+      h("div", { className: "dsh-notify-row" },
+        h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("connection")), h("span", null, t("connectionDesc"))),
+        h("span", { className: "dsh-notify-badge", role: "status" }, t(`connection${connection}`))
       ),
       h("div", { className: "dsh-notify-row" },
-        h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("faviconStatus")), h("span", null, t("faviconStatusDesc"))),
-        h("div", { className: "dsh-notify-permission" },
-          h("span", { className: "dsh-notify-badge", "data-fav": favState.level || "none" },
-            t(favState.level ? `favLevel${favState.level[0]?.toUpperCase()}${favState.level.slice(1)}` : (snapshot.value.faviconEnabled === true ? "favLevelNone" : "favLevelDisabled"))),
-          h("span", { className: "dsh-notify-badge", "data-fav-error": favState.error ? "true" : undefined },
-            favState.error ? t(`favError${favState.error === "no-fill" ? "NoFill" : "Unavailable"}`) : t("favErrorOk"))
-        )
-      ),
-      h("div", { className: "dsh-notify-row" },
-        h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("permission")), h("span", null, t("permissionDesc"))),
+        h("div", { className: "dsh-notify-rowText" }, h("strong", null, t("permission")), h("span", null, t(isDesktop() ? "desktopPermissionDesc" : "permissionDesc"))),
         h("div", { className: "dsh-notify-permission" },
           h("span", { className: "dsh-notify-badge", "data-state": permission }, t(`permission${permission[0]?.toUpperCase()}${permission.slice(1)}`)),
           h("button", { type: "button", disabled: permission === "unsupported" || permission === "granted", onClick: authorize }, t("authorize")),
           h("button", { type: "button", onClick: () => setPermission(permissionOf()) }, t("recheck")),
-          h("button", { type: "button", disabled: permission !== "granted", onClick: () => controller.test() }, t("test"))
+          h("button", { type: "button", disabled: permission !== "granted", onClick: testNotification }, t("test"))
         )
       ),
       snapshot.status === "unavailable" ? h("p", { className: "dsh-notify-status", "data-error": "true" }, t("unavailable")) : null,
       state.error ? h("p", { className: "dsh-notify-status", "data-error": "true" }, state.error) : null,
+      testResult ? h("p", { className: "dsh-notify-status", role: "status" }, testResult) : null,
       h("div", { className: "dsh-notify-actions" },
         h("button", { type: "button", "data-primary": "true", disabled: state.saving || !snapshot.writable || !dirty, onClick: save }, state.saving ? t("saving") : t("save")),
         h("button", { type: "button", disabled: state.saving || !snapshot.writable, onClick: reset }, t("reset"))
@@ -707,11 +536,7 @@ export function apply(ctx) {
   const store = createConfigStore();
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-notifications: locale");
   const t = ctx.locale.bind(NS);
-  const favicon = createFaviconController();
-  const stateController = createStateController({ controller: favicon, store, sessions: ctx.sessions });
-  const controller = createNotificationController(ctx, store, t, {
-    onState: (message) => stateController.handleState(message)
-  });
+  const controller = createNotificationController(ctx, store, t);
   ctx.effect(() => {
     const tag = document.createElement("style");
     tag.dataset.plugin = "dsh-notifications";
@@ -720,19 +545,17 @@ export function apply(ctx) {
     return () => tag.remove();
   }, "dsh-notifications: styles");
   ctx.effect(() => controller.start(), "dsh-notifications: event stream");
-  ctx.effect(() => stateController.start(), "dsh-notifications: favicon state");
-  ctx.slots.inject("shell.overlay", () => ctx.slots.register({
-    name: "shell.overlay",
-    id: "dsh-notifications-pending-interactions",
-    order: -100,
-    inject: () => ({ stateController })
-  }, PendingInteractionBridge));
-  ctx.slots.inject("settings.plugin.item", () => ctx.slots.register({
-    name: "settings.plugin.item",
-    key: "dsh-notifications",
-    id: "notifications",
+  // 使用独立设置分区，不再依赖「内置插件」页挂载；打开页面即展示所有配置。
+  const SettingsPage = (props) => React.createElement("ul", { className: "dsh-notify-page" }, React.createElement(SettingsCard, props));
+  ctx.slots.inject("settings.section", () => ctx.slots.register({
+    name: "settings.section",
+    id: "dsh-notifications",
     order: 70,
-    inject: () => ({ store, controller, t, stateController, favicon })
-  }, SettingsCard));
+    label: () => t("title"),
+    icon: notificationNavIcon(React),
+    locale: NS,
+    inject: () => ({ store, controller, t })
+  }, SettingsPage));
+  ctx.effect(() => installNotificationNavIcon(t), "dsh-notifications: settings nav icon");
   void store.load();
 }

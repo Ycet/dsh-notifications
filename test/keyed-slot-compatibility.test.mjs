@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-test("built client registers the notification card and pending bridge in separate slots", (t) => {
+test("built client registers only its own settings section with the notification icon", (t) => {
   const bundle = readFileSync(new URL("../client.js", import.meta.url), "utf8");
   const cleanups = [];
   const registrations = [];
@@ -13,7 +13,7 @@ test("built client registers the notification card and pending bridge in separat
     __ModuleLoader__: {
       load(entry) {
         client = entry.factory((name) => {
-          if (name === "react") return {};
+          if (name === "react") return { createElement: (type, props, ...children) => ({ type, props, children }) };
           throw new Error(`unexpected client dependency: ${name}`);
         });
       }
@@ -72,13 +72,10 @@ test("built client registers the notification card and pending bridge in separat
     },
     slots: {
       inject(name, factory) {
-        assert.ok(["shell.overlay", "settings.plugin.item"].includes(name));
+        assert.equal(name, "settings.section");
         return factory();
       },
       register(options) {
-        if (options.name === "settings.plugin.item" && options.key === undefined) {
-          throw new Error(`keyed slot ${JSON.stringify(options.name)} requires options.key`);
-        }
         registrations.push(options);
         return () => {};
       }
@@ -86,9 +83,11 @@ test("built client registers the notification card and pending bridge in separat
   };
 
   client.apply(ctx);
-  const settings = registrations.find((registration) => registration.name === "settings.plugin.item");
-  const bridge = registrations.find((registration) => registration.name === "shell.overlay");
-  assert.equal(settings?.key, "dsh-notifications");
-  assert.equal(settings?.id, "notifications");
-  assert.equal(bridge?.id, "dsh-notifications-pending-interactions");
+  const settings = registrations.find((registration) => registration.name === "settings.section");
+  assert.equal(settings?.id, "dsh-notifications");
+  assert.equal(settings?.order, 70);
+  assert.equal(settings?.icon.type, "svg");
+  assert.equal(settings?.icon.props.viewBox, "0 0 1024 1024");
+  assert.equal(settings?.icon.children[0].props.fill, "currentColor");
+  assert.equal(registrations.length, 1);
 });

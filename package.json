@@ -1,7 +1,7 @@
 {
   "name": "dsh-notifications",
-  "version": "0.2.6",
-  "description": "DeepSeek Harness web notifications for approvals, structured questions, and task outcomes.",
+  "version": "0.3.1",
+  "description": "DeepSeek Harness desktop and web notifications for approvals, structured questions, and task outcomes.",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -32,10 +32,10 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-ui-session"
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-workspace"
       ]
     }
   },
@@ -44,10 +44,11 @@
     "deepseek-harness",
     "notifications",
     "approval",
-    "web"
+    "web",
+    "desktop"
   ],
   "dependencies": {
-    "schemastery": "^3.18.0"
+    "@deepseek-ai/schemastery": "^3.18.4"
   },
   "devDependencies": {
     "esbuild": "^0.25.9"
