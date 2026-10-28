@@ -14,7 +14,7 @@ await build({
   format: "cjs",
   platform: "browser",
   target: ["es2020"],
-  external: ["react"],
+  external: ["react", "@deepseek-ai/dsh-client-ui-primitives"],
   legalComments: "none",
   sourcemap: false,
   minifySyntax: true,

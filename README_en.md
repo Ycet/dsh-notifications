@@ -6,7 +6,7 @@ Desktop and Web alerts for DeepSeek Harness approvals, structured questions and 
 [![English](https://img.shields.io/badge/English-blue?style=for-the-badge)](README_en.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.1-blue.svg?style=for-the-badge)](package.json)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue.svg?style=for-the-badge)](package.json)
 
 ## 📑 Contents
 
@@ -30,6 +30,8 @@ Desktop and Web alerts for DeepSeek Harness approvals, structured questions and 
 | Subagent switch | Disable child task results while retaining child approval and question alerts |
 | Dedicated settings | Settings → Notifications with a bell icon, bilingual controls, stream status, permission checks, test results, save and reset |
 | Minimal event data | SSE excludes chat text, questions, approval arguments and tool arguments |
+
+**v0.3.2 replaces the six toggles on Settings → Notifications with DSH's official `Switch` from `@deepseek-ai/dsh-client-ui-primitives`, so size, colors, disabled state and focus ring match the official settings pages; child toggles now show only the official disabled state instead of dimming the whole row.** The dependency is declared in `dsh.client.inject`; the minimum supported version is DeepSeek Harness 0.2.0-rc.2.
 
 **v0.3.1 moves configuration to Settings → Notifications, preserving existing switches and saved configuration.** Whale icon recoloring, color display and its state tracking have been removed. Legacy `faviconEnabled` values are ignored.
 
@@ -124,6 +126,7 @@ The directory must contain official `node_modules`. Without it, only this integr
 ## ⚠️ Compatibility and limits
 
 - Desktop compatibility targets DeepSeek Harness **0.2.0-rc.2**. The client remains `platform: web`, matching the official Desktop renderer.
+- Settings toggles reuse `@deepseek-ai/dsh-client-ui-primitives` from the host frontend, declared in `dsh.client.inject`. That static module has shipped the official `Switch` since **0.2.0-rc.2**; below that version the settings toggles are unavailable.
 - Legacy Web navigation fallbacks remain. Other versions, OSes and browsers require their own validation; they are not all verified.
 - The application or page must remain running. There is no push after shutdown, custom sound or external messaging channel.
 - Only explicit approval/question events and structured question calls trigger interaction alerts. Ordinary chat text is not scanned. Unknown-event diagnostics log types and field names only.

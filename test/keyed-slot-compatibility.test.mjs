@@ -14,6 +14,8 @@ test("built client registers only its own settings section with the notification
       load(entry) {
         client = entry.factory((name) => {
           if (name === "react") return { createElement: (type, props, ...children) => ({ type, props, children }) };
+          // 官方 Switch 由宿主静态模块表提供；该用例只校验注册行为，用桩组件即可。
+          if (name === "@deepseek-ai/dsh-client-ui-primitives") return { Switch: (props) => ({ type: "Switch", props }) };
           throw new Error(`unexpected client dependency: ${name}`);
         });
       }

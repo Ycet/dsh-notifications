@@ -14,11 +14,16 @@ test("built client registers an independent settings page and required runtime p
   assert.match(bundle, /new (?:window\.)?Notification/);
   assert.match(bundle, /ctx\.sessions\.open/);
   assert.match(bundle, /subagentTaskEndedEnabled/);
-  assert.match(bundle, /aria-disabled/);
-  assert.match(bundle, /aria-label/);
-  assert.match(bundle, /data-disabled/);
   assert.match(bundle, /disabled: !draft\.enabled/);
   assert.match(bundle, /data-dsh-notifications-nav-icon/);
+  // 功能开关必须复用官方 primitives 的 Switch 组件，避免与官方设置页产生视觉差异。
+  assert.match(bundle, /require\("@deepseek-ai\/dsh-client-ui-primitives"\)/);
+  assert.match(bundle, /\.Switch\b/);
+  // 自绘开关的类名与状态属性必须彻底移除，避免残留样式覆盖官方组件。
+  assert.doesNotMatch(bundle, /dsh-notify-switch/);
+  assert.doesNotMatch(bundle, /data-active/);
+  assert.doesNotMatch(bundle, /data-disabled/);
+  assert.doesNotMatch(bundle, /aria-disabled/);
 });
 
 test("desktop client removes icon mutation and carries native session navigation", () => {

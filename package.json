@@ -1,6 +1,6 @@
 {
   "name": "dsh-notifications",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "DeepSeek Harness desktop and web notifications for approvals, structured questions, and task outcomes.",
   "type": "module",
   "main": "index.js",
@@ -35,7 +35,8 @@
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-session",
-        "@deepseek-ai/dsh-client-ui-workspace"
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-primitives"
       ]
     }
   },

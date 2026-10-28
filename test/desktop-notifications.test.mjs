@@ -1,7 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createLeaderElector, createNotificationController, currentSessionId, openNotificationSession } from "../src/client.js";
+import { registerHooks } from "node:module";
 import { notificationAddress } from "../index.js";
+
+// 设置页开关已改用官方 primitives 的 Switch 组件；该包只在 DSH 前端运行时提供，
+// 单测不渲染设置页，因此把该模块解析到桩，避免测试环境缺少宿主包。
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "@deepseek-ai/dsh-client-ui-primitives") {
+      return { url: new URL("./fixtures/client-ui-primitives-stub.mjs", import.meta.url).href, shortCircuit: true };
+    }
+    return nextResolve(specifier, context);
+  }
+});
+
+const { createLeaderElector, createNotificationController, currentSessionId, openNotificationSession } = await import("../src/client.js");
 
 function environment(t, { permission = "granted", focused = false, hidden = false, throws = false } = {}) {
   const notifications = [];

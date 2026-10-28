@@ -6,7 +6,7 @@
 [![English](https://img.shields.io/badge/English-blue?style=for-the-badge)](README_en.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.1-blue.svg?style=for-the-badge)](package.json)
+[![Version](https://img.shields.io/badge/version-0.3.2-blue.svg?style=for-the-badge)](package.json)
 
 ## 📑 目录
 
@@ -30,6 +30,8 @@
 | 子代理开关 | 可关闭子代理任务结果提醒，仍保留子代理待审批和提问提醒 |
 | 独立设置 | 「设置 → 消息通知」入口及通知图标，支持连接状态、授权、测试结果、保存、恢复默认及中英文 |
 | 最小事件数据 | SSE 不包含聊天正文、问题、审批参数或工具参数 |
+
+**v0.3.2 把「设置 → 消息通知」的 6 个功能开关改为 DSH 官方 `@deepseek-ai/dsh-client-ui-primitives` 的 `Switch` 组件，尺寸、配色、禁用态与焦点环与官方设置页一致；主开关关闭时子开关只呈现官方禁用态，不再整行降低透明度。** 依赖已写入 `dsh.client.inject`，最低支持 DeepSeek Harness 0.2.0-rc.2。
 
 **v0.3.1 将配置入口迁移至「设置 → 消息通知」，原通知开关和已保存配置保留。** 鲸鱼图标变色、颜色状态显示及对应状态追踪已移除，旧配置中的 `faviconEnabled` 会被忽略。
 
@@ -124,6 +126,7 @@ DSH_RUNTIME_DIR="<prepared-dsh-runtime-directory>" pnpm test
 ## ⚠️ 兼容性与限制
 
 - 桌面兼容目标为 DeepSeek Harness **0.2.0-rc.2**。客户端仍使用 `platform: web`，与官方桌面 Web 渲染器一致。
+- 设置页开关复用宿主前端提供的 `@deepseek-ai/dsh-client-ui-primitives`（已声明在 `dsh.client.inject`）。该静态模块自 **0.2.0-rc.2** 起包含官方 `Switch` 组件；低于该版本时设置页开关不可用。
 - 保留旧 Web 导航兜底；其他 DSH 版本、操作系统及浏览器需要各自验收，不代表已全部验证。
 - 应用或页面必须保持运行；不提供关闭应用后的推送、自定义声音或外部消息渠道。
 - 仅识别明确审批/提问事件和结构化提问工具调用，不从普通聊天文本推断通知。未知事件日志只记录类型和字段名。
