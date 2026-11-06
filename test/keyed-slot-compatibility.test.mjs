@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-test("built client registers only its own settings section with the notification icon", (t) => {
+test("built client registers its own settings section plus the official section-icon slot", (t) => {
   const bundle = readFileSync(new URL("../client.js", import.meta.url), "utf8");
   const cleanups = [];
   const registrations = [];
@@ -74,7 +74,8 @@ test("built client registers only its own settings section with the notification
     },
     slots: {
       inject(name, factory) {
-        assert.equal(name, "settings.section");
+        // 只允许注入本插件自己的分区槽与官方 0.2.2 新增的分区图标槽。
+        assert.ok(name === "settings.section" || name === "settings.section.icon", `unexpected slot: ${name}`);
         return factory();
       },
       register(options) {
@@ -91,5 +92,9 @@ test("built client registers only its own settings section with the notification
   assert.equal(settings?.icon.type, "svg");
   assert.equal(settings?.icon.props.viewBox, "0 0 1024 1024");
   assert.equal(settings?.icon.children[0].props.fill, "currentColor");
-  assert.equal(registrations.length, 1);
+  // 官方 0.2.2 起新增 settings.section.icon：注册 id 必须等于分区 id，否则壳层不渲染。
+  const icon = registrations.find((registration) => registration.name === "settings.section.icon");
+  assert.equal(icon?.id, "dsh-notifications");
+  assert.equal(icon?.order, 70);
+  assert.equal(registrations.length, 2);
 });

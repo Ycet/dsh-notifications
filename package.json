@@ -1,6 +1,6 @@
 {
   "name": "dsh-notifications",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "DeepSeek Harness desktop and web notifications for approvals, structured questions, and task outcomes.",
   "type": "module",
   "main": "index.js",
@@ -24,6 +24,9 @@
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
     "check": "node --check index.js && node --check lib/classifier.js && node --check lib/event-hub.js && node --check src/client.js"
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.2"
   },
   "dsh": {
     "bundle": {

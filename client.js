@@ -592,7 +592,13 @@ function apply(ctx) {
     icon: notificationNavIcon(import_react.default),
     locale: NS,
     inject: () => ({ store, controller, t })
-  }, SettingsPage)), ctx.effect(() => installNotificationNavIcon(t), "dsh-notifications: settings nav icon"), store.load();
+  }, SettingsPage)), ctx.slots.inject("settings.section.icon", () => ctx.slots.register({
+    name: "settings.section.icon",
+    id: "dsh-notifications",
+    order: 70,
+    label: () => t("title"),
+    locale: NS
+  }, () => notificationNavIcon(import_react.default))), ctx.effect(() => installNotificationNavIcon(t), "dsh-notifications: settings nav icon"), store.load();
 }
 
     return module.exports;

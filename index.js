@@ -49,15 +49,52 @@ function isLoopbackHostname(hostname) {
   return parts.length === 4 && parts[0] === "127" && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
 }
 
+/**
+ * 浏览器信任围栏（Host + Origin + 浏览器凭据）。
+ *
+ * 首选官方 Host `connection` 服务的 `requestRejection(request)`：它一次判完
+ * 回环 / 绑定地址 / trustedHosts / sec-fetch-site / Origin，并要求请求携带已认证
+ * 的浏览器 Peer，返回 403、401 或 undefined。该服务自 0.2.1 起就已存在
+ * （`@deepseek-ai/dsh-client-connection`），是官方给「非内建 Web 路由」准备的口子。
+ *
+ * 服务缺失（更老的 dsh、或未挂载 Web 载体的进程）时退回本地判定，放行集合与
+ * 旧实现保持一致：回环一律放行，非回环必须命中受信主机列表。
+ *
+ * @param {{ headers: Record<string, unknown> }} req 原始 HTTP 请求（只需要 headers）
+ * @param {*} ctx 宿主上下文
+ * @returns {boolean} 该请求是否可信
+ */
 export function trustedRequest(req, ctx) {
+  const connection = ctx?.get?.("connection");
+  if (connection !== null && connection !== undefined && typeof connection.requestRejection === "function") {
+    try {
+      // 官方语义：undefined 表示放行；403/401 表示拒绝。
+      return connection.requestRejection({ headers: req.headers }) === undefined;
+    } catch {
+      /* 服务异常时退回本地判定 */
+    }
+  }
+  return localTrustedRequest(req, ctx, connection);
+}
+
+/**
+ * 本地信任判定（回退路径）：回环 / 受信主机列表 + 非跨站 + 同源。
+ * 受信主机来源取官方 `connection.trustedHosts`，其次 `webStartup.trustedHosts`；
+ * 旧实现读的 `webRuntime` 服务在任何 dsh 版本中都不存在，已移除。
+ */
+function localTrustedRequest(req, ctx, connection) {
   const host = req.headers.host;
   if (typeof host !== "string" || host === "") return false;
   let hostname;
   try { hostname = new URL(`http://${host}`).hostname; }
   catch { return false; }
   if (!isLoopbackHostname(hostname)) {
-    const trustedHosts = ctx.get("webRuntime")?.trustedHosts;
-    if (!Array.isArray(trustedHosts) || !trustedHosts.some((candidate) => candidate === host || candidate.split(":")[0] === hostname)) return false;
+    const trustedHosts = connection?.trustedHosts ?? ctx?.get?.("webStartup")?.trustedHosts;
+    if (!Array.isArray(trustedHosts)) return false;
+    const accepted = trustedHosts.some(
+      (candidate) => typeof candidate === "string" && (candidate === host || candidate.split(":")[0] === hostname)
+    );
+    if (!accepted) return false;
   }
   if (req.headers["sec-fetch-site"] === "cross-site") return false;
   const origin = req.headers.origin;

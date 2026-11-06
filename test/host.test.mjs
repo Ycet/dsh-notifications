@@ -39,6 +39,35 @@ test("trust fence accepts loopback same-origin and rejects cross-site requests",
   assert.equal(trustedRequest({ headers: { host: "example.test:3080" } }, ctx), false);
 });
 
+// DSH 0.2.1+ 提供 Host `connection` 服务：requestRejection 一次判完 Host/Origin/凭据。
+test("trust fence delegates to the official connection service when present", () => {
+  const calls = [];
+  const ctx = {
+    get: (name) => (name === "connection" ? {
+      requestRejection: (request) => {
+        calls.push(request.headers.host);
+        return request.headers.host === "dsh.example.com:3080" ? undefined : 403;
+      }
+    } : undefined)
+  };
+  // 官方放行 → 放行，即便该主机不是回环地址（旧实现会因读不到 webRuntime 而拒绝）
+  assert.equal(trustedRequest({ headers: { host: "dsh.example.com:3080" } }, ctx), true);
+  // 官方拒绝 → 拒绝
+  assert.equal(trustedRequest({ headers: { host: "evil.example:3080" } }, ctx), false);
+  // 确认请求头被原样转交给官方判定
+  assert.deepEqual(calls, ["dsh.example.com:3080", "evil.example:3080"]);
+});
+
+test("trust fence falls back to the local check when the connection service is absent", () => {
+  // 旧版 dsh 没有 connection 服务时，改读 webStartup.trustedHosts，不再读不存在的 webRuntime
+  const ctx = { get: (name) => (name === "webStartup" ? { trustedHosts: ["dsh.example.com"] } : undefined) };
+  assert.equal(trustedRequest({ headers: { host: "dsh.example.com:3080", origin: "http://dsh.example.com:3080" } }, ctx), true);
+  assert.equal(trustedRequest({ headers: { host: "other.example.com:3080" } }, ctx), false);
+  // connection 服务存在但没有 requestRejection 时，同样走本地判定并读它的 trustedHosts
+  const legacy = { get: (name) => (name === "connection" ? { trustedHosts: ["dsh.example.com:3080"] } : undefined) };
+  assert.equal(trustedRequest({ headers: { host: "dsh.example.com:3080" } }, legacy), true);
+});
+
 class MockRequest extends EventEmitter {
   constructor(method, body) {
     super();

@@ -6,7 +6,7 @@
 [![English](https://img.shields.io/badge/English-blue?style=for-the-badge)](README_en.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.2-blue.svg?style=for-the-badge)](package.json)
+[![Version](https://img.shields.io/badge/version-0.3.3-blue.svg?style=for-the-badge)](package.json)
 
 ## 📑 目录
 
@@ -30,6 +30,8 @@
 | 子代理开关 | 可关闭子代理任务结果提醒，仍保留子代理待审批和提问提醒 |
 | 独立设置 | 「设置 → 消息通知」入口及通知图标，支持连接状态、授权、测试结果、保存、恢复默认及中英文 |
 | 最小事件数据 | SSE 不包含聊天正文、问题、审批参数或工具参数 |
+
+**v0.3.3 修正两处与 DSH 新版本（0.2.2-rc.1）相关的兼容问题：设置导航图标改走官方 `settings.section.icon` 插槽（旧壳继续由遮罩方案兜底）；三条 `/api/*` 路由的信任围栏改由官方 Host `connection.requestRejection` 判定，修掉「读取不存在的 `webRuntime` 服务导致受信远程主机一律 403」的老缺陷。同时补上 `engines.dsh`，让 DSH 的插件兼容性门禁对本事生效。最低支持 DeepSeek Harness 0.2.1-rc.2。**
 
 **v0.3.2 把「设置 → 消息通知」的 6 个功能开关改为 DSH 官方 `@deepseek-ai/dsh-client-ui-primitives` 的 `Switch` 组件，尺寸、配色、禁用态与焦点环与官方设置页一致；主开关关闭时子开关只呈现官方禁用态，不再整行降低透明度。** 依赖已写入 `dsh.client.inject`，最低支持 DeepSeek Harness 0.2.0-rc.2。
 
@@ -125,7 +127,7 @@ DSH_RUNTIME_DIR="<prepared-dsh-runtime-directory>" pnpm test
 
 ## ⚠️ 兼容性与限制
 
-- 桌面兼容目标为 DeepSeek Harness **0.2.0-rc.2**。客户端仍使用 `platform: web`，与官方桌面 Web 渲染器一致。
+- 桌面兼容目标为 DeepSeek Harness **0.2.1-rc.2 及以上**（`engines.dsh: >=0.2.1-rc.2`）。客户端仍使用 `platform: web`，与官方桌面 Web 渲染器一致。
 - 设置页开关复用宿主前端提供的 `@deepseek-ai/dsh-client-ui-primitives`（已声明在 `dsh.client.inject`）。该静态模块自 **0.2.0-rc.2** 起包含官方 `Switch` 组件；低于该版本时设置页开关不可用。
 - 保留旧 Web 导航兜底；其他 DSH 版本、操作系统及浏览器需要各自验收，不代表已全部验证。
 - 应用或页面必须保持运行；不提供关闭应用后的推送、自定义声音或外部消息渠道。

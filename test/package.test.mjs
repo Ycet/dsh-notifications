@@ -8,7 +8,9 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 test("package exposes a host and web client bundle", async () => {
   const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  assert.equal(pkg.version, "0.3.2");
+  assert.equal(pkg.version, "0.3.3");
+  // 声明 dsh 版本下限，使 DSH 0.2.2 的插件兼容性门禁对本事生效。
+  assert.equal(pkg.engines.dsh, ">=0.2.1-rc.2");
   assert.equal(pkg.main, "index.js");
   assert.equal(pkg.exports["./client"], "./client.js");
   assert.equal(pkg.dsh.bundle.patch, "./cordis.patch.yml");
