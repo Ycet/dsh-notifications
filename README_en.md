@@ -58,6 +58,18 @@ dsh plugin --profile web add "dsh-notifications@link:<absolute-path-to-plugin>"
 dsh web
 ```
 
+### Install from GitHub / a Release asset (no local source, no npm account)
+
+```sh
+# Option 1: GitHub dependency (pinned to a release tag; requires git)
+dsh plugin --profile web add "github:Ycet/dsh-notifications#v0.3.3"
+
+# Option 2: Release asset tarball (no git required)
+dsh plugin --profile web add "https://github.com/Ycet/dsh-notifications/releases/download/v0.3.3/dsh-notifications-0.3.3.tgz"
+
+# Desktop: replace --profile web with --profile desktop (using the desktop-bundled CLI)
+```
+
 Open DSH, grant notification access in Notifications settings and send a test notification.
 
 > [!NOTE]

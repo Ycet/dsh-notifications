@@ -58,6 +58,18 @@ dsh plugin --profile web add "dsh-notifications@link:<absolute-path-to-plugin>"
 dsh web
 ```
 
+### 从 GitHub / Release 安装（无需本地源码，无需 npm 账号）
+
+```sh
+# 方式一：GitHub 依赖（锁定版本 tag，需本机有 git）
+dsh plugin --profile web add "github:Ycet/dsh-notifications#v0.3.3"
+
+# 方式二：Release 资产 tarball（无需 git）
+dsh plugin --profile web add "https://github.com/Ycet/dsh-notifications/releases/download/v0.3.3/dsh-notifications-0.3.3.tgz"
+
+# 桌面端：把 --profile web 换成 --profile desktop（使用桌面端自带 CLI）
+```
+
 打开 DSH，在「消息通知」配置中授权通知并发送测试通知。
 
 > [!NOTE]
