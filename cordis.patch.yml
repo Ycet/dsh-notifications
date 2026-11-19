@@ -1,4 +1,7 @@
 # dsh-notifications bundle patch
+#
+# name 必须等于 package.json 的 name。npm 上无作用域的 dsh-notifications 已被其他作者
+# 占用（lu.haotian，2.0.1），故发布名为 @ycet/dsh-notifications；行 id 保持 notifications 不变。
 - insert:
     - id: notifications
-      name: dsh-notifications
+      name: '@ycet/dsh-notifications'

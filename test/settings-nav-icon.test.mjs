@@ -65,3 +65,17 @@ test("icon observation does not watch its own attributes and is released on disp
   assert.equal(env.observer.disconnected, true);
   assert.equal(env.notifications.hasAttribute(MARK), false);
 });
+
+test("official icon slot retires the DOM fallback and its observer", () => {
+  const env = fixture();
+  let official = false;
+  const dispose = installNotificationNavIcon(() => "消息通知", env, { active: () => !official });
+  assert.equal(env.notifications.hasAttribute(MARK), true);
+  // 官方 settings.section.icon 接管后，下一次同步即停用并断开观察器。
+  official = true;
+  env.observer.callback();
+  assert.equal(env.notifications.hasAttribute(MARK), false);
+  assert.equal(env.observer.disconnected, true);
+  dispose();
+  assert.equal(env.notifications.hasAttribute(MARK), false);
+});

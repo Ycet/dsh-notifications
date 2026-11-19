@@ -21,15 +21,20 @@ test("official Desktop runtime: scoped session events, child identity and dispos
     routes.set(route.path, route.handler); return () => routes.delete(route.path);
   } });
   ctx.provide("settings", { describe: () => [{ ns: "notifications", revision: 1 }] });
+  // 0.2.2 起 SubagentRuntime 注入 workingDirectory + sessionProjections；
+  // 缺少前者时服务不会激活，"subagent" 投影不注册，地址用例会退化为 undefined。
+  // 激活也必须走 ctx.plugin：构造函数形式的 new 不再触发 Service.init。
+  ctx.provide("workingDirectory", { defaultDirectory: "/tmp" });
   new SessionStore(ctx);
   new SessionProjectionRegistry(ctx);
-  new SubagentRuntime(ctx, SubagentRuntime.Config({}));
-  await new Promise(resolve => setImmediate(resolve));
+  ctx.plugin(SubagentRuntime, {});
+  await new Promise(resolve => setTimeout(resolve, 20));
   // 旧 profile 的图标开关不会阻碍新版配置解析，也不会重新出现在设置表单中。
   const parsed = Config({ faviconEnabled: true, taskFailedEnabled: false });
   assert.equal(parsed.taskFailedEnabled.get(), false);
   const switches = Object.fromEntries(Object.entries(DEFAULTS).map(([k, v]) => [k, { get: () => v }]));
-  const plugin = ctx.plugin({ name: "dsh-notifications-probe", apply: c => apply(c, switches) });
+  // 宽限期置 0：集成用例只校验事件与子代理地址，不等待 1.5 秒。
+  const plugin = ctx.plugin({ name: "dsh-notifications-probe", apply: c => apply(c, switches, { approvalGraceMs: 0 }) });
   await new Promise(resolve => setImmediate(resolve));
   const request = new EventEmitter(); request.method = "GET"; request.headers = { host: "127.0.0.1:3080" };
   let output = ""; let closed = false;

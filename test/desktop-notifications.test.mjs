@@ -139,10 +139,34 @@ test("legacy Web opens discovered child and root; deleted targets only focus", a
   assert.deepEqual(ctx.opened, ["s", address]); assert.equal(env.focusCount, 3);
 });
 
+test("Host child address reads the official projection snapshot", () => {
+  const child = { id: "child", header: { origin: "subagent", parentSession: "parent" } };
+  const seen = [];
+  const ctx = { get: name => name === "sessionProjections" ? {
+    // 官方非弃用读取：wire 视图就是 identity 本身。
+    snapshot: (session, keys) => {
+      seen.push([session, keys]);
+      return { values: { subagent: { mode: "continuable", label: "private", seq: 2 } } };
+    }
+  } : undefined };
+  assert.deepEqual(notificationAddress(child, ctx), {
+    parentSessionId: "parent", childSessionId: "child", mode: "continuable"
+  });
+  assert.deepEqual(seen, [[child, ["subagent"]]]);
+});
+
+// 老版本 0.2.1 只有已弃用的 stateOf；snapshot 缺失时仍要能读出地址。
 test("Host child address exposes only ids and descriptor mode", () => {
   const address = notificationAddress({ id: "child", header: { origin: "subagent", parentSession: "parent" } },
     { get: () => ({ stateOf: () => ({ identity: { mode: "one-shot", label: "private", seq: 1 } }) }) });
   assert.deepEqual(address, { parentSessionId: "parent", childSessionId: "child", mode: "one-shot" });
+});
+
+test("Host child address is absent without a usable projection", () => {
+  const child = { id: "child", header: { origin: "subagent", parentSession: "parent" } };
+  assert.equal(notificationAddress(child, { get: () => ({ snapshot: () => ({ values: { subagent: null } }) }) }), undefined);
+  assert.equal(notificationAddress(child, { get: () => ({ snapshot: () => { throw new Error("no fold"); } }) }), undefined);
+  assert.equal(notificationAddress(child, { get: () => undefined }), undefined);
 });
 
 test("notification failure and plugin disposal do not throw or keep sending", t => {

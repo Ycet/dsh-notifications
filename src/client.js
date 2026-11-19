@@ -559,15 +559,23 @@ export function apply(ctx) {
     inject: () => ({ store, controller, t })
   }, SettingsPage));
   // 官方 0.2.2 起提供正式的分区导航图标插槽：注册 id 必须等于对应 settings.section 的 id，
-  // 命中后壳层不再渲染默认齿轮。旧版壳没有该插槽，inject 静默不注册，
-  // 继续由下面的 DOM 钩子（遮罩方案）兜底，两条路径不会互相覆盖。
-  ctx.slots.inject("settings.section.icon", () => ctx.slots.register({
-    name: "settings.section.icon",
-    id: "dsh-notifications",
-    order: 70,
-    label: () => t("title"),
-    locale: NS
-  }, () => notificationNavIcon(React)));
-  ctx.effect(() => installNotificationNavIcon(t), "dsh-notifications: settings nav icon");
+  // 命中后壳层不再渲染默认齿轮。inject 的回调在插槽已声明时会同步执行，因此用它记录
+  // 官方是否接管；旧版壳没有该插槽时回调不执行，继续由 DOM 钩子（遮罩方案）兜底。
+  let officialIconSlot = false;
+  ctx.slots.inject("settings.section.icon", () => {
+    officialIconSlot = true;
+    return ctx.slots.register({
+      name: "settings.section.icon",
+      id: "dsh-notifications",
+      order: 70,
+      label: () => t("title"),
+      locale: NS
+    }, () => notificationNavIcon(React));
+  });
+  // 官方插槽已接管时不再安装观察器，避免设置页外的常驻 DOM 扫描。
+  ctx.effect(
+    () => (officialIconSlot ? () => {} : installNotificationNavIcon(t, undefined, { active: () => !officialIconSlot })),
+    "dsh-notifications: settings nav icon"
+  );
   void store.load();
 }

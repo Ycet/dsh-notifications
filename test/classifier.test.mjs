@@ -30,6 +30,18 @@ test("requires an explicit pending state for generic approval and question types
   assert.equal(classifier.classify("s1", { type: "question/changed", seq: 4, data: { state: "waiting" } }).type, "question_pending");
 });
 
+test("carries the approval id only for approval notifications", () => {
+  const classifier = createEventClassifier();
+  // 宿主用它把 approval/asked 与 approval/decided 配对，其他类型不得携带。
+  const approval = classifier.classify("s1", { type: "approval/asked", seq: 1, data: { id: "a-1", toolName: "bash" } });
+  assert.equal(approval.type, "approval_pending");
+  assert.equal(approval.approvalId, "a-1");
+  assert.equal("approvalId" in classifier.classify("s1", { type: "turn/end", seq: 2, data: {} }), false);
+  // 不可用或异常的 id 不参与配对。
+  assert.equal("approvalId" in classifier.classify("s1", { type: "approval/asked", seq: 3, data: { id: 7 } }), false);
+  assert.equal("approvalId" in classifier.classify("s1", { type: "approval/asked", seq: 4, data: { id: "x".repeat(129) } }), false);
+});
+
 test("event contract contains keys but never values", () => {
   assert.deepEqual(eventContract({ type: "tool/call", data: { arguments: "secret", name: "request_user_input" } }), {
     type: "tool/call",

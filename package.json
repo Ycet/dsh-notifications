@@ -1,7 +1,20 @@
 {
-  "name": "dsh-notifications",
-  "version": "0.3.3",
+  "name": "@ycet/dsh-notifications",
+  "version": "0.3.4",
   "description": "DeepSeek Harness desktop and web notifications for approvals, structured questions, and task outcomes.",
+  "author": "Ycet",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ycet/dsh-notifications.git"
+  },
+  "homepage": "https://github.com/Ycet/dsh-notifications#readme",
+  "bugs": {
+    "url": "https://github.com/Ycet/dsh-notifications/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "main": "index.js",
   "exports": {

@@ -185,7 +185,8 @@ test("host config route rejects unavailable forms and stale revisions", async ()
 
 test("desktop Host SSE emits all four types without body text or icon frames", () => {
   const runtime = mockContext();
-  apply(runtime.ctx, runtime.config);
+  // 宽限期置 0：本用例只校验四类事件的帧内容，配对时序由下一个用例覆盖。
+  apply(runtime.ctx, runtime.config, { approvalGraceMs: 0 });
   const stream = new MockResponse();
   const close = runtime.routes.get(EVENTS_PATH)(new MockRequest("GET"), stream);
   const emit = event => runtime.handlers.get("session/event").forEach(fn => fn({ id: "root", header: {} }, event));
@@ -198,6 +199,27 @@ test("desktop Host SSE emits all four types without body text or icon frames", (
   assert.deepEqual(frames.map(x => x.type), ["approval_pending", "question_pending", "task_succeeded", "task_failed"]);
   assert.doesNotMatch(stream.chunks, /private-|arguments|event: state/);
   assert.equal(runtime.routes.has("/dsh-notifications/api/viewed"), false);
+  close(); runtime.dispose();
+});
+
+// 官方在 never 策略或信号已中止时会立刻补写 approval/decided：这类请求不真的等待用户。
+test("approval alerts wait out the grace period and stay silent when decided", async () => {
+  const runtime = mockContext();
+  apply(runtime.ctx, runtime.config, { approvalGraceMs: 20 });
+  const stream = new MockResponse();
+  const close = runtime.routes.get(EVENTS_PATH)(new MockRequest("GET"), stream);
+  const emit = event => runtime.handlers.get("session/event").forEach(fn => fn({ id: "root", header: {} }, event));
+  emit({ type: "approval/asked", seq: 0, data: { id: "fast", toolName: "bash" } });
+  // 事件名归一化：approval:decided 与 approval/decided 等价。
+  emit({ type: "approval:decided", seq: 1, data: { id: "fast", outcome: "rejected" } });
+  emit({ type: "approval/asked", seq: 2, data: { id: "slow", toolName: "bash" } });
+  await new Promise(resolve => setTimeout(resolve, 60));
+  const frames = [...String(stream.chunks ?? "").matchAll(/^data: (.+)$/gm)].map(match => JSON.parse(match[1]));
+  assert.deepEqual(frames.map(frame => frame.type), ["approval_pending"]);
+  assert.equal(frames[0].eventId, "root:2:approval_pending");
+  // approvalId 只用于宿主配对，不能进入 SSE。
+  assert.equal("approvalId" in frames[0], false);
+  assert.doesNotMatch(String(stream.chunks), /"fast"|"slow"/);
   close(); runtime.dispose();
 });
 

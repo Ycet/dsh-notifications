@@ -8,7 +8,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 test("package exposes a host and web client bundle", async () => {
   const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  assert.equal(pkg.version, "0.3.3");
+  assert.equal(pkg.version, "0.3.4");
   // 声明 dsh 版本下限，使 DSH 0.2.2 的插件兼容性门禁对本事生效。
   assert.equal(pkg.engines.dsh, ">=0.2.1-rc.2");
   assert.equal(pkg.main, "index.js");
@@ -22,7 +22,10 @@ test("package exposes a host and web client bundle", async () => {
   assert.ok(pkg.dsh.client.inject.includes("@deepseek-ai/dsh-client-ui-primitives"));
   const patch = await readFile(join(root, "cordis.patch.yml"), "utf8");
   assert.match(patch, /insert:/);
-  assert.match(patch, /name: dsh-notifications/);
+  // bundle patch 的行 name 必须等于 package.json 的 name（npm 发布名 @ycet/dsh-notifications）。
+  assert.ok(patch.includes(`name: '${pkg.name}'`));
+  // 行 id 保持 notifications 不变，用户既有 profile 配置不受包名变更影响。
+  assert.ok(patch.includes("id: notifications"));
 });
 
 test("client registers the independent settings section and notification stream", async () => {
@@ -43,4 +46,7 @@ test("client registers the independent settings section and notification stream"
   assert.doesNotMatch(source, /dsh-notify-switch|data-active|data-disabled|aria-disabled/);
   assert.doesNotMatch(source, /faviconEnabled|api\/viewed|createFaviconController/);
   assert.match(source, /workspace\.openSession/);
+  // 官方图标插槽接管后不再安装 DOM 兜底。
+  assert.match(source, /officialIconSlot/);
+  assert.match(source, /active: \(\) => !officialIconSlot/);
 });
